@@ -1,0 +1,56 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "hello": {
+      "comment": "A simple greeting",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hello"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "こんにちは"
+          }
+        }
+      }
+    },
+    "goodbye": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Goodbye"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "さようなら"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adiós"
+          }
+        }
+      }
+    },
+    "untranslated_key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untranslated Key"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
