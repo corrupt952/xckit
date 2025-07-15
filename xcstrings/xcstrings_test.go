@@ -43,7 +43,7 @@ func TestLoad(t *testing.T) {
 			}`,
 			wantErr:   false,
 			wantKeys:  []string{"hello"},
-			wantLangs: []string{"en", "ja"},
+			wantLangs: []string{"ja"}, // en is excluded as source language
 		},
 		{
 			name:    "invalid json",
@@ -154,23 +154,47 @@ func TestXCStrings_GetKeysWithAnyUntranslated(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",
 		Strings: map[string]StringDefinition{
-			"fully_translated": {
+			"all_translated": {
 				Localizations: map[string]Localization{
 					"en": {StringUnit: StringUnit{State: "translated", Value: "Hello"}},
 					"ja": {StringUnit: StringUnit{State: "translated", Value: "こんにちは"}},
+					"es": {StringUnit: StringUnit{State: "translated", Value: "Hola"}},
 				},
 			},
-			"partially_translated": {
+			"ja_untranslated": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Partial"}},
-					"ja": {StringUnit: StringUnit{State: "new", Value: "部分的"}},
+					"en": {StringUnit: StringUnit{State: "translated", Value: "English"}},
+					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
+					"es": {StringUnit: StringUnit{State: "translated", Value: "Español"}},
+				},
+			},
+			"es_missing": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "English only"}},
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "日本語"}},
+					// es is missing - should be considered untranslated
+				},
+			},
+			"only_en_translated": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "English"}},
+					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
+					// es is missing
+				},
+			},
+			"all_untranslated": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "new", Value: ""}},
+					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
+					"es": {StringUnit: StringUnit{State: "new", Value: ""}},
 				},
 			},
 		},
 	}
 
 	got := xcstrings.KeysWithAnyUntranslated()
-	want := []string{"partially_translated"}
+	// all_translated should NOT be in the list
+	want := []string{"ja_untranslated", "es_missing", "only_en_translated", "all_untranslated"}
 
 	sort.Strings(got)
 	sort.Strings(want)

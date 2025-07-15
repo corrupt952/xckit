@@ -1,0 +1,25 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "greeting": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+        "ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}},
+        "es": {"stringUnit": {"state": "translated", "value": "Hola"}}
+      }
+    },
+    "farewell": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Goodbye"}},
+        "ja": {"stringUnit": {"state": "new", "value": ""}}
+      }
+    },
+    "welcome": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Welcome"}},
+        "es": {"stringUnit": {"state": "translated", "value": "Bienvenido"}}
+      }
+    }
+  },
+  "version": "1.0"
+}

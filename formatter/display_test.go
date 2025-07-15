@@ -64,7 +64,6 @@ func TestDisplayKeyDetails(t *testing.T) {
 			keys: []string{"hello"},
 			expectedOutput: []string{
 				"hello:",
-				"en: translated - Hello",
 				"es: new - Hola",
 				"ja: translated - こんにちは",
 			},
@@ -74,7 +73,6 @@ func TestDisplayKeyDetails(t *testing.T) {
 			keys: []string{"goodbye"},
 			expectedOutput: []string{
 				"goodbye:",
-				"en: translated - Goodbye",
 				"ja: translated - (empty)",
 			},
 		},
@@ -83,7 +81,6 @@ func TestDisplayKeyDetails(t *testing.T) {
 			keys: []string{"missing_translations"},
 			expectedOutput: []string{
 				"missing_translations:",
-				"en: translated - Missing",
 				"ja: missing",
 			},
 		},
@@ -93,8 +90,9 @@ func TestDisplayKeyDetails(t *testing.T) {
 			expectedOutput: []string{
 				"hello:",
 				"goodbye:",
-				"en: translated - Hello",
-				"en: translated - Goodbye",
+				"es: new - Hola",
+				"ja: translated - こんにちは",
+				"ja: translated - (empty)",
 			},
 		},
 		{
@@ -144,9 +142,9 @@ func TestDisplayKeyDetails_OutputFormat(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
-	// Check basic structure
-	if len(lines) < 3 {
-		t.Errorf("expected at least 3 lines of output, got %d", len(lines))
+	// Check basic structure (1 key line + at least 1 language line)
+	if len(lines) < 2 {
+		t.Errorf("expected at least 2 lines of output, got %d", len(lines))
 	}
 
 	// First line should be key name
@@ -199,6 +197,10 @@ func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 		}
 	}
 
-	expectedOrder := []string{"en", "es", "ja", "zh"}
+	expectedOrder := []string{"es", "ja", "zh"} // en is excluded as source language
+	if len(languageOrder) != len(expectedOrder) {
+		t.Errorf("expected %d languages, got %d", len(expectedOrder), len(languageOrder))
+		return
+	}
 	test.AssertSliceEqual(t, languageOrder, expectedOrder)
 }

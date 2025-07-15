@@ -1,0 +1,31 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "fully_translated": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "English"}},
+        "ja": {"stringUnit": {"state": "translated", "value": "日本語"}},
+        "es": {"stringUnit": {"state": "translated", "value": "Español"}}
+      }
+    },
+    "ja_missing": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "English only"}},
+        "es": {"stringUnit": {"state": "translated", "value": "Solo español"}}
+      }
+    },
+    "es_untranslated": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "English"}},
+        "ja": {"stringUnit": {"state": "translated", "value": "日本語"}},
+        "es": {"stringUnit": {"state": "new", "value": ""}}
+      }
+    },
+    "only_en": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "English only"}}
+      }
+    }
+  },
+  "version": "1.0"
+}

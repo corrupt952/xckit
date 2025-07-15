@@ -89,7 +89,10 @@ func (x *XCStrings) Languages() []string {
 	languageSet := make(map[string]bool)
 	for _, definition := range x.Strings {
 		for lang := range definition.Localizations {
-			languageSet[lang] = true
+			// Exclude source language from the list
+			if lang != x.SourceLanguage {
+				languageSet[lang] = true
+			}
 		}
 	}
 
@@ -126,17 +129,12 @@ func (x *XCStrings) KeysWithAnyUntranslated() []string {
 	var result []string
 	languages := x.Languages()
 
-	for key := range x.Strings {
+	for key, definition := range x.Strings {
 		hasUntranslated := false
 		for _, lang := range languages {
-			untranslated := x.UntranslatedKeys(lang)
-			for _, untranslatedKey := range untranslated {
-				if untranslatedKey == key {
-					hasUntranslated = true
-					break
-				}
-			}
-			if hasUntranslated {
+			localization, exists := definition.Localizations[lang]
+			if !exists || localization.StringUnit.State != "translated" {
+				hasUntranslated = true
 				break
 			}
 		}

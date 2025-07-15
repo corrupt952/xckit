@@ -1,0 +1,20 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "greeting": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "new", "value": ""}},
+        "ja": {"stringUnit": {"state": "new", "value": ""}},
+        "es": {"stringUnit": {"state": "new", "value": ""}}
+      }
+    },
+    "farewell": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "new", "value": ""}},
+        "ja": {"stringUnit": {"state": "new", "value": ""}},
+        "es": {"stringUnit": {"state": "new", "value": ""}}
+      }
+    }
+  },
+  "version": "1.0"
+}

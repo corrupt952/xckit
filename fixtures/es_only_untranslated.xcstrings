@@ -1,0 +1,19 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "greeting": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+        "ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}},
+        "es": {"stringUnit": {"state": "new", "value": ""}}
+      }
+    },
+    "farewell": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Goodbye"}},
+        "ja": {"stringUnit": {"state": "translated", "value": "さようなら"}}
+      }
+    }
+  },
+  "version": "1.0"
+}
