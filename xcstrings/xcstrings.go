@@ -46,6 +46,14 @@ func Load(path string) (*XCStrings, error) {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
+	// Initialize nil localizations to empty maps to prevent null serialization
+	for key, def := range xcstrings.Strings {
+		if def.Localizations == nil {
+			def.Localizations = make(map[string]Localization)
+			xcstrings.Strings[key] = def
+		}
+	}
+
 	return &xcstrings, nil
 }
 

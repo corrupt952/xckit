@@ -351,6 +351,63 @@ func TestXCStrings_SaveToFile(t *testing.T) {
 	test.AssertEqual(t, len(loaded.Strings), 1)
 }
 
+func TestXCStrings_LoadEmptyLocalizationsInitialized(t *testing.T) {
+	// Test that empty objects {} are loaded with initialized localizations map
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"%@": {},
+			"test": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Test"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	tmpFile := test.TempFile(t, "empty_localizations.xcstrings", testContent)
+
+	// Load the file
+	xcstrings, err := Load(tmpFile)
+	test.AssertNoError(t, err)
+
+	// Verify that empty localizations are initialized
+	formatKey, exists := xcstrings.Strings["%@"]
+	if !exists {
+		t.Fatal("Expected '%%@' key to exist")
+	}
+
+	if formatKey.Localizations == nil {
+		t.Error("Expected localizations to be initialized, but it was nil")
+	}
+
+	// Modify another key
+	err = xcstrings.SetTranslation("test", "ja", "テスト")
+	test.AssertNoError(t, err)
+
+	// Save the file
+	tmpOutput := test.TempFile(t, "output.xcstrings", "")
+	err = xcstrings.SaveToFile(tmpOutput)
+	test.AssertNoError(t, err)
+
+	// Reload and verify localizations are not null
+	reloaded, err := Load(tmpOutput)
+	test.AssertNoError(t, err)
+
+	reloadedFormatKey, exists := reloaded.Strings["%@"]
+	if !exists {
+		t.Fatal("Expected '%%@' key to exist after reload")
+	}
+
+	if reloadedFormatKey.Localizations == nil {
+		t.Error("Expected localizations to remain initialized after save/load, but it was nil")
+	}
+
+	// Verify it's an empty map, not nil
+	test.AssertEqual(t, len(reloadedFormatKey.Localizations), 0)
+}
+
 func TestXCStrings_GetTranslatedKeys(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",
