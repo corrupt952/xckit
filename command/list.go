@@ -12,7 +12,6 @@ import (
 
 type ListCommand struct {
 	XCStringsCommand
-	language string
 }
 
 func (*ListCommand) Name() string {
@@ -24,12 +23,11 @@ func (*ListCommand) Synopsis() string {
 }
 
 func (*ListCommand) Usage() string {
-	return "list [-f file.xcstrings] [--lang <language>]: List all keys with translation status\n"
+	return "list [-f file.xcstrings]: List all keys with translation status\n"
 }
 
 func (c *ListCommand) SetFlags(f *flag.FlagSet) {
 	c.SetXCStringsFlags(f)
-	f.StringVar(&c.language, "lang", "", "Target language code (e.g., ja, fr, de) - optional")
 }
 
 func (c *ListCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
@@ -39,30 +37,15 @@ func (c *ListCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface
 		return subcommands.ExitFailure
 	}
 
-	var keysToShow []string
-	if c.language != "" {
-		keysToShow = xcstrings.TranslatedKeys(c.language)
-	} else {
-		keysToShow = xcstrings.Keys()
-	}
-
+	keysToShow := xcstrings.Keys()
 	sort.Strings(keysToShow)
 
 	if len(keysToShow) == 0 {
-		if c.language != "" {
-			fmt.Printf("No keys are translated for language '%s'\n", c.language)
-		} else {
-			fmt.Println("No keys found")
-		}
+		fmt.Println("No keys found")
 		return subcommands.ExitSuccess
 	}
 
-	if c.language != "" {
-		fmt.Printf("Keys translated in language '%s':\n", c.language)
-	} else {
-		fmt.Println("All keys with translation status:")
-	}
-
+	fmt.Println("All keys with translation status:")
 	formatter.DisplayKeyDetails(xcstrings, keysToShow)
 	return subcommands.ExitSuccess
 }

@@ -218,7 +218,7 @@ func TestIntegration_Set(t *testing.T) {
 	}
 
 	// Verify the translation was set by checking the file
-	stdout, stderr, exitCode = runXckit(t, binaryPath, "list", "-f", xcstringsPath, "--lang", "ja")
+	stdout, stderr, exitCode = runXckit(t, binaryPath, "list", "-f", xcstringsPath)
 
 	test.AssertEqual(t, exitCode, 0)
 	test.AssertEqual(t, stderr, "")
@@ -263,11 +263,6 @@ func TestIntegration_List(t *testing.T) {
 			name:         "list all keys",
 			args:         []string{"list", "-f", xcstringsPath},
 			expectedKeys: []string{"key1:", "key2:"},
-		},
-		{
-			name:         "list translated keys for specific language",
-			args:         []string{"list", "-f", xcstringsPath, "--lang", "ja"},
-			expectedKeys: []string{"key1:"}, // Only key1 has Japanese translation
 		},
 	}
 

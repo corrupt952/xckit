@@ -30,12 +30,6 @@ Show all localization keys with their translation status:
 xckit list
 ```
 
-List translated keys for a specific language:
-
-```bash
-xckit list --lang ja
-```
-
 ### Find untranslated keys
 
 Find all untranslated keys across all languages:

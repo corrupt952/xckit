@@ -40,12 +40,6 @@ func TestListCommand_Execute(t *testing.T) {
 			expectedKeys:   []string{"key1:", "key2:"},
 			expectedStatus: 0,
 		},
-		{
-			name:           "list translated keys for specific language",
-			args:           []string{"--lang", "ja"},
-			expectedKeys:   []string{"key1:"}, // Only key1 has Japanese translation
-			expectedStatus: 0,
-		},
 	}
 
 	for _, tt := range tests {
@@ -74,37 +68,6 @@ func TestListCommand_Execute(t *testing.T) {
 	}
 }
 
-func TestListCommand_Execute_NoTranslated(t *testing.T) {
-	testContent := `{
-		"sourceLanguage": "en",
-		"strings": {
-			"key1": {
-				"localizations": {
-					"en": {"stringUnit": {"state": "translated", "value": "Key 1"}}
-				}
-			}
-		},
-		"version": "1.0"
-	}`
-
-	filePath := test.TempFile(t, "test.xcstrings", testContent)
-
-	cmd := &ListCommand{}
-
-	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
-	cmd.SetFlags(flagSet)
-	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja"}) // No Japanese translations
-	test.AssertNoError(t, err)
-
-	output := captureOutput(func() {
-		status := cmd.Execute(context.Background(), flagSet)
-		test.AssertEqual(t, int(status), 0)
-	})
-
-	if !strings.Contains(output, "No keys are translated") {
-		t.Errorf("output should indicate no keys are translated, got: %q", output)
-	}
-}
 
 func TestListCommand_Execute_FileNotFound(t *testing.T) {
 	cmd := &ListCommand{}
