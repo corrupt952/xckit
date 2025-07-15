@@ -24,6 +24,17 @@ func TestUntranslatedCommand_Execute(t *testing.T) {
 					"en": {"stringUnit": {"state": "translated", "value": "Untranslated"}},
 					"ja": {"stringUnit": {"state": "new", "value": "未翻訳"}}
 				}
+			},
+			"error.network": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Network Error"}}
+				}
+			},
+			"error.timeout": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Timeout Error"}},
+					"ja": {"stringUnit": {"state": "new", "value": ""}}
+				}
 			}
 		},
 		"version": "1.0"
@@ -38,13 +49,31 @@ func TestUntranslatedCommand_Execute(t *testing.T) {
 		{
 			name:           "untranslated for specific language",
 			args:           []string{"--lang", "ja"},
-			expectedKeys:   []string{"untranslated_key"},
+			expectedKeys:   []string{"untranslated_key", "error.network", "error.timeout"},
 			expectedStatus: 0,
 		},
 		{
 			name:           "untranslated for all languages",
 			args:           []string{},
-			expectedKeys:   []string{"untranslated_key"},
+			expectedKeys:   []string{"untranslated_key", "error.network", "error.timeout"},
+			expectedStatus: 0,
+		},
+		{
+			name:           "untranslated with prefix",
+			args:           []string{"--prefix", "error"},
+			expectedKeys:   []string{"error.network", "error.timeout"},
+			expectedStatus: 0,
+		},
+		{
+			name:           "untranslated with prefix and language",
+			args:           []string{"--lang", "ja", "--prefix", "error"},
+			expectedKeys:   []string{"error.network", "error.timeout"},
+			expectedStatus: 0,
+		},
+		{
+			name:           "untranslated with non-matching prefix",
+			args:           []string{"--prefix", "login"},
+			expectedKeys:   []string{},
 			expectedStatus: 0,
 		},
 	}
@@ -65,6 +94,13 @@ func TestUntranslatedCommand_Execute(t *testing.T) {
 				status := cmd.Execute(context.Background(), flagSet)
 				test.AssertEqual(t, int(status), tt.expectedStatus)
 			})
+
+			if len(tt.expectedKeys) == 0 {
+				if strings.Contains(output, "No untranslated keys found") || strings.Contains(output, "All keys are translated") {
+					// Expected behavior for non-matching prefix or all translated
+					return
+				}
+			}
 
 			for _, expectedKey := range tt.expectedKeys {
 				if !strings.Contains(output, expectedKey) {

@@ -23,6 +23,16 @@ func TestListCommand_Execute(t *testing.T) {
 				"localizations": {
 					"en": {"stringUnit": {"state": "translated", "value": "Key 2"}}
 				}
+			},
+			"login.title": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Login"}}
+				}
+			},
+			"login.button": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Sign In"}}
+				}
 			}
 		},
 		"version": "1.0"
@@ -37,7 +47,19 @@ func TestListCommand_Execute(t *testing.T) {
 		{
 			name:           "list all keys",
 			args:           []string{},
-			expectedKeys:   []string{"key1:", "key2:"},
+			expectedKeys:   []string{"key1:", "key2:", "login.title:", "login.button:"},
+			expectedStatus: 0,
+		},
+		{
+			name:           "list keys with prefix",
+			args:           []string{"--prefix", "login"},
+			expectedKeys:   []string{"login.title:", "login.button:"},
+			expectedStatus: 0,
+		},
+		{
+			name:           "list keys with non-matching prefix",
+			args:           []string{"--prefix", "error"},
+			expectedKeys:   []string{},
 			expectedStatus: 0,
 		},
 	}
@@ -59,6 +81,13 @@ func TestListCommand_Execute(t *testing.T) {
 				test.AssertEqual(t, int(status), tt.expectedStatus)
 			})
 
+			if len(tt.expectedKeys) == 0 {
+				if strings.Contains(output, "No keys found with prefix") {
+					// Expected behavior for non-matching prefix
+					return
+				}
+			}
+
 			for _, expectedKey := range tt.expectedKeys {
 				if !strings.Contains(output, expectedKey) {
 					t.Errorf("output should contain %q, got: %q", expectedKey, output)
@@ -67,7 +96,6 @@ func TestListCommand_Execute(t *testing.T) {
 		})
 	}
 }
-
 
 func TestListCommand_Execute_FileNotFound(t *testing.T) {
 	cmd := &ListCommand{}

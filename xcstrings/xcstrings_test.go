@@ -236,6 +236,65 @@ func TestXCStrings_SetTranslation(t *testing.T) {
 	}
 }
 
+func TestFilterKeysByPrefix(t *testing.T) {
+	xcstrings := &XCStrings{}
+
+	tests := []struct {
+		name     string
+		keys     []string
+		prefix   string
+		expected []string
+	}{
+		{
+			name:     "empty prefix returns all keys",
+			keys:     []string{"login.title", "login.button", "settings.title"},
+			prefix:   "",
+			expected: []string{"login.title", "login.button", "settings.title"},
+		},
+		{
+			name:     "filter by login prefix",
+			keys:     []string{"login.title", "login.button", "settings.title", "logout.button"},
+			prefix:   "login",
+			expected: []string{"login.title", "login.button"},
+		},
+		{
+			name:     "no matching keys",
+			keys:     []string{"login.title", "settings.title"},
+			prefix:   "error",
+			expected: []string{},
+		},
+		{
+			name:     "exact match",
+			keys:     []string{"login", "login.title", "settings"},
+			prefix:   "login",
+			expected: []string{"login", "login.title"},
+		},
+		{
+			name:     "case sensitive",
+			keys:     []string{"Login.title", "login.button"},
+			prefix:   "login",
+			expected: []string{"login.button"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := xcstrings.FilterKeysByPrefix(tt.keys, tt.prefix)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d keys, got %d", len(tt.expected), len(result))
+				return
+			}
+
+			for i, key := range result {
+				if key != tt.expected[i] {
+					t.Errorf("expected key[%d] to be %s, got %s", i, tt.expected[i], key)
+				}
+			}
+		})
+	}
+}
+
 func TestXCStrings_SaveToFile(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",

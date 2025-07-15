@@ -30,6 +30,12 @@ Show all localization keys with their translation status:
 xckit list
 ```
 
+Filter keys by prefix:
+
+```bash
+xckit list --prefix "login"
+```
+
 ### Find untranslated keys
 
 Find all untranslated keys across all languages:
@@ -42,6 +48,13 @@ Find untranslated keys for a specific language:
 
 ```bash
 xckit untranslated --lang ja
+```
+
+Filter untranslated keys by prefix:
+
+```bash
+xckit untranslated --prefix "error"
+xckit untranslated --lang ja --prefix "login"
 ```
 
 ### Set translations

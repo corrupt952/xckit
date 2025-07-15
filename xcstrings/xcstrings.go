@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // XCStrings represents the structure of an Xcode String Catalog file.
@@ -158,4 +159,19 @@ func (x *XCStrings) TranslatedKeys(language string) []string {
 		}
 	}
 	return translated
+}
+
+// FilterKeysByPrefix returns keys that start with the given prefix.
+func (x *XCStrings) FilterKeysByPrefix(keys []string, prefix string) []string {
+	if prefix == "" {
+		return keys
+	}
+
+	var filtered []string
+	for _, key := range keys {
+		if strings.HasPrefix(key, prefix) {
+			filtered = append(filtered, key)
+		}
+	}
+	return filtered
 }
