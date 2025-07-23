@@ -20,7 +20,7 @@ type StringDefinition struct {
 	Comment         string                  `json:"comment,omitempty"`
 	ExtractionState string                  `json:"extractionState,omitempty"`
 	Localizations   map[string]Localization `json:"localizations"`
-	ShouldTranslate bool                    `json:"shouldTranslate,omitempty"`
+	ShouldTranslate *bool                   `json:"shouldTranslate,omitempty"`
 }
 
 // Localization represents localization data for a specific language.
@@ -84,6 +84,9 @@ func (x *XCStrings) Keys() []string {
 func (x *XCStrings) UntranslatedKeys(language string) []string {
 	var untranslated []string
 	for key, definition := range x.Strings {
+		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
+			continue
+		}
 		localization, exists := definition.Localizations[language]
 		if !exists || localization.StringUnit.State != "translated" {
 			untranslated = append(untranslated, key)
@@ -138,6 +141,9 @@ func (x *XCStrings) KeysWithAnyUntranslated() []string {
 	languages := x.Languages()
 
 	for key, definition := range x.Strings {
+		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
+			continue
+		}
 		hasUntranslated := false
 		for _, lang := range languages {
 			localization, exists := definition.Localizations[lang]

@@ -115,6 +115,12 @@ func TestXCStrings_GetUntranslatedKeys(t *testing.T) {
 					"en": {StringUnit: StringUnit{State: "translated", Value: "Missing"}},
 				},
 			},
+			"should_not_translate": {
+				ShouldTranslate: func() *bool { b := false; return &b }(),
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Don't translate"}},
+				},
+			},
 		},
 	}
 
@@ -189,16 +195,77 @@ func TestXCStrings_GetKeysWithAnyUntranslated(t *testing.T) {
 					"es": {StringUnit: StringUnit{State: "new", Value: ""}},
 				},
 			},
+			"should_not_translate": {
+				ShouldTranslate: func() *bool { b := false; return &b }(),
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Don't translate"}},
+					// ja and es are missing, but this should not appear in untranslated list
+				},
+			},
 		},
 	}
 
 	got := xcstrings.KeysWithAnyUntranslated()
 	// all_translated should NOT be in the list
+	// should_not_translate should NOT be in the list because shouldTranslate=false
 	want := []string{"ja_untranslated", "es_missing", "only_en_translated", "all_untranslated"}
 
 	sort.Strings(got)
 	sort.Strings(want)
 	test.AssertSliceEqual(t, got, want)
+}
+
+func TestXCStrings_ShouldTranslateFlag(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"normal_key": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Normal"}},
+				},
+			},
+			"should_translate_true": {
+				ShouldTranslate: func() *bool { b := true; return &b }(),
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Translate me"}},
+				},
+			},
+			"should_translate_false": {
+				ShouldTranslate: func() *bool { b := false; return &b }(),
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Don't translate"}},
+				},
+			},
+			"placeholder_key": {
+				ShouldTranslate: func() *bool { b := false; return &b }(),
+				Localizations:   map[string]Localization{},
+			},
+			"already_translated": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Already translated"}},
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "翻訳済み"}},
+				},
+			},
+		},
+	}
+
+	t.Run("UntranslatedKeys should skip shouldTranslate=false", func(t *testing.T) {
+		untranslated := xcstrings.UntranslatedKeys("ja")
+		want := []string{"normal_key", "should_translate_true"}
+
+		sort.Strings(untranslated)
+		sort.Strings(want)
+		test.AssertSliceEqual(t, untranslated, want)
+	})
+
+	t.Run("KeysWithAnyUntranslated should skip shouldTranslate=false", func(t *testing.T) {
+		keysWithUntranslated := xcstrings.KeysWithAnyUntranslated()
+		want := []string{"normal_key", "should_translate_true"}
+
+		sort.Strings(keysWithUntranslated)
+		sort.Strings(want)
+		test.AssertSliceEqual(t, keysWithUntranslated, want)
+	})
 }
 
 func TestXCStrings_SetTranslation(t *testing.T) {
