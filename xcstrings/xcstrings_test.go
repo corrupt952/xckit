@@ -475,6 +475,105 @@ func TestXCStrings_LoadEmptyLocalizationsInitialized(t *testing.T) {
 	test.AssertEqual(t, len(reloadedFormatKey.Localizations), 0)
 }
 
+func TestXCStrings_SaveToFile_AtomicWrite(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"key": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Value"}},
+				},
+			},
+		},
+		Version: "1.0",
+	}
+
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "atomic.xcstrings")
+
+	err := xcstrings.SaveToFile(filePath)
+	test.AssertNoError(t, err)
+
+	// Verify no temp files remain in the directory
+	entries, err := os.ReadDir(tmpDir)
+	test.AssertNoError(t, err)
+
+	if len(entries) != 1 {
+		t.Errorf("expected exactly 1 file in dir, got %d", len(entries))
+	}
+	if entries[0].Name() != "atomic.xcstrings" {
+		t.Errorf("expected file name atomic.xcstrings, got %s", entries[0].Name())
+	}
+
+	// Verify file content is correct after atomic write
+	loaded, err := Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, loaded.SourceLanguage, "en")
+	test.AssertEqual(t, loaded.Version, "1.0")
+	test.AssertEqual(t, len(loaded.Strings), 1)
+}
+
+func TestXCStrings_SaveToFile_InvalidDirectory(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings:        map[string]StringDefinition{},
+		Version:        "1.0",
+	}
+
+	err := xcstrings.SaveToFile("/nonexistent/directory/file.xcstrings")
+	test.AssertError(t, err)
+}
+
+func TestXCStrings_SaveToFile_OverwriteExisting(t *testing.T) {
+	original := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"old_key": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Old"}},
+				},
+			},
+		},
+		Version: "1.0",
+	}
+
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "overwrite.xcstrings")
+
+	err := original.SaveToFile(filePath)
+	test.AssertNoError(t, err)
+
+	// Overwrite with new content
+	updated := &XCStrings{
+		SourceLanguage: "ja",
+		Strings: map[string]StringDefinition{
+			"new_key": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "New"}},
+				},
+			},
+		},
+		Version: "2.0",
+	}
+
+	err = updated.SaveToFile(filePath)
+	test.AssertNoError(t, err)
+
+	// Verify overwritten content
+	loaded, err := Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, loaded.SourceLanguage, "ja")
+	test.AssertEqual(t, loaded.Version, "2.0")
+	test.AssertEqual(t, len(loaded.Strings), 1)
+
+	// Verify no temp files remain
+	entries, err := os.ReadDir(tmpDir)
+	test.AssertNoError(t, err)
+	if len(entries) != 1 {
+		t.Errorf("expected exactly 1 file after overwrite, got %d", len(entries))
+	}
+}
+
 func TestXCStrings_GetTranslatedKeys(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",

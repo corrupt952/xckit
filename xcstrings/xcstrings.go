@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -57,15 +58,42 @@ func Load(path string) (*XCStrings, error) {
 	return &xcstrings, nil
 }
 
-// SaveToFile writes the XCStrings data to a file at the given path.
+// SaveToFile writes the XCStrings data to a file at the given path using atomic writes.
+// It writes to a temporary file in the same directory, syncs to disk, then renames
+// to the target path to prevent data corruption from interrupted writes.
 func (x *XCStrings) SaveToFile(path string) error {
 	data, err := json.MarshalIndent(x, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".xcstrings-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		// Clean up temp file on error; after successful rename this is a no-op.
+		os.Remove(tmpPath)
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to sync temp file: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
 	return nil
