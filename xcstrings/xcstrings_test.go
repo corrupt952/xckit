@@ -475,6 +475,82 @@ func TestXCStrings_LoadEmptyLocalizationsInitialized(t *testing.T) {
 	test.AssertEqual(t, len(reloadedFormatKey.Localizations), 0)
 }
 
+func TestXCStrings_NeedsReviewKeys(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"translated_key": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "翻訳済み"}},
+				},
+			},
+			"needs_review_key": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: StringUnit{State: "needs_review", Value: "レビュー必要"}},
+				},
+			},
+			"untranslated_key": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
+				},
+			},
+			"missing_key": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Missing"}},
+				},
+			},
+			"should_not_translate": {
+				ShouldTranslate: func() *bool { b := false; return &b }(),
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: StringUnit{State: "needs_review", Value: "翻訳不要"}},
+				},
+			},
+		},
+	}
+
+	t.Run("returns only needs_review keys", func(t *testing.T) {
+		got := xcstrings.NeedsReviewKeys("ja")
+		want := []string{"needs_review_key"}
+
+		sort.Strings(got)
+		sort.Strings(want)
+		test.AssertSliceEqual(t, got, want)
+	})
+
+	t.Run("needs_review keys are included in untranslated", func(t *testing.T) {
+		untranslated := xcstrings.UntranslatedKeys("ja")
+		sort.Strings(untranslated)
+
+		// needs_review_key should be in untranslated since state != "translated"
+		found := false
+		for _, key := range untranslated {
+			if key == "needs_review_key" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected needs_review_key to appear in UntranslatedKeys result")
+		}
+	})
+
+	t.Run("no needs_review keys for language without any", func(t *testing.T) {
+		got := xcstrings.NeedsReviewKeys("fr")
+		if len(got) != 0 {
+			t.Errorf("expected 0 needs_review keys for fr, got %d", len(got))
+		}
+	})
+
+	t.Run("skips shouldTranslate=false", func(t *testing.T) {
+		got := xcstrings.NeedsReviewKeys("ja")
+		for _, key := range got {
+			if key == "should_not_translate" {
+				t.Error("should_not_translate key should be excluded from NeedsReviewKeys")
+			}
+		}
+	})
+}
+
 func TestXCStrings_GetTranslatedKeys(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",

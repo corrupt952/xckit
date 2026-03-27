@@ -160,6 +160,21 @@ func (x *XCStrings) KeysWithAnyUntranslated() []string {
 	return result
 }
 
+// NeedsReviewKeys returns keys that have needs_review state for the given language.
+func (x *XCStrings) NeedsReviewKeys(language string) []string {
+	var keys []string
+	for key, def := range x.Strings {
+		if def.ShouldTranslate != nil && !*def.ShouldTranslate {
+			continue
+		}
+		loc, exists := def.Localizations[language]
+		if exists && loc.StringUnit.State == "needs_review" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
 // TranslatedKeys returns keys that are translated for the given language.
 func (x *XCStrings) TranslatedKeys(language string) []string {
 	var translated []string
