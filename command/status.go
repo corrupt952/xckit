@@ -51,10 +51,11 @@ func (c *StatusCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 
 	for _, lang := range languages {
 		untranslated := xcstrings.UntranslatedKeys(lang)
+		needsReview := xcstrings.NeedsReviewKeys(lang)
 		translated := totalKeys - len(untranslated)
 		percentage := float64(translated) / float64(totalKeys) * 100
 
-		fmt.Printf("%-6s: %3d/%d translated (%.1f%%)\n", lang, translated, totalKeys, percentage)
+		fmt.Printf("%-6s: %3d/%d translated, %d needs_review (%.1f%%)\n", lang, translated, totalKeys, len(needsReview), percentage)
 	}
 
 	return subcommands.ExitSuccess
