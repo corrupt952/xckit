@@ -152,12 +152,12 @@ func (x *XCStrings) SetTranslation(key, language, value string) error {
 		definition.Localizations = make(map[string]Localization)
 	}
 
-	definition.Localizations[language] = Localization{
-		StringUnit: StringUnit{
-			State: "translated",
-			Value: value,
-		},
+	loc := definition.Localizations[language]
+	loc.StringUnit = StringUnit{
+		State: "translated",
+		Value: value,
 	}
+	definition.Localizations[language] = loc
 
 	x.Strings[key] = definition
 	return nil
