@@ -327,6 +327,40 @@ func TestXCStrings_SetTranslation(t *testing.T) {
 	}
 }
 
+func TestXCStrings_SetTranslation_PreservesExistingLocalization(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"greeting": {
+				Comment:         "A greeting message",
+				ExtractionState: "manual",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "こんにちは"}},
+				},
+			},
+		},
+	}
+
+	// Update the Japanese translation
+	err := xcstrings.SetTranslation("greeting", "ja", "やあ")
+	test.AssertNoError(t, err)
+
+	// Verify the translation was updated
+	loc := xcstrings.Strings["greeting"].Localizations["ja"]
+	test.AssertEqual(t, loc.StringUnit.State, "translated")
+	test.AssertEqual(t, loc.StringUnit.Value, "やあ")
+
+	// Verify other localizations are not affected
+	enLoc := xcstrings.Strings["greeting"].Localizations["en"]
+	test.AssertEqual(t, enLoc.StringUnit.Value, "Hello")
+
+	// Verify StringDefinition-level fields are preserved
+	def := xcstrings.Strings["greeting"]
+	test.AssertEqual(t, def.Comment, "A greeting message")
+	test.AssertEqual(t, def.ExtractionState, "manual")
+}
+
 func TestFilterKeysByPrefix(t *testing.T) {
 	xcstrings := &XCStrings{}
 
