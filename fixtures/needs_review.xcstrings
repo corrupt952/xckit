@@ -1,0 +1,41 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "translated_key": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Translated"}},
+        "ja": {"stringUnit": {"state": "translated", "value": "翻訳済み"}},
+        "es": {"stringUnit": {"state": "translated", "value": "Traducido"}}
+      }
+    },
+    "needs_review_key": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Needs Review"}},
+        "ja": {"stringUnit": {"state": "needs_review", "value": "レビュー必要"}},
+        "es": {"stringUnit": {"state": "translated", "value": "Necesita revisión"}}
+      }
+    },
+    "untranslated_key": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Untranslated"}},
+        "ja": {"stringUnit": {"state": "new", "value": ""}},
+        "es": {"stringUnit": {"state": "new", "value": ""}}
+      }
+    },
+    "multiple_needs_review": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Multiple Reviews"}},
+        "ja": {"stringUnit": {"state": "needs_review", "value": "レビュー必要2"}},
+        "es": {"stringUnit": {"state": "needs_review", "value": "Necesita revisión 2"}}
+      }
+    },
+    "do_not_translate": {
+      "shouldTranslate": false,
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Do Not Translate"}},
+        "ja": {"stringUnit": {"state": "needs_review", "value": "翻訳不要"}}
+      }
+    }
+  },
+  "version": "1.0"
+}
