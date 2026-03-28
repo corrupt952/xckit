@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"xckit/xcstrings"
 )
@@ -40,7 +41,7 @@ func (c *XCStringsCommand) findXCStringsFile() string {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() && len(entry.Name()) > 10 && entry.Name()[len(entry.Name())-10:] == ".xcstrings" {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".xcstrings") {
 			return entry.Name()
 		}
 	}
