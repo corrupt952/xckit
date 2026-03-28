@@ -255,6 +255,289 @@ func TestUntranslatedCommand_Execute_FileNotFound(t *testing.T) {
 	test.AssertEqual(t, int(status), 1) // ExitFailure
 }
 
+func TestUntranslatedCommand_Execute_Detail(t *testing.T) {
+	tests := []struct {
+		name             string
+		content          string
+		args             []string
+		shouldContain    []string
+		shouldNotContain []string
+	}{
+		{
+			name: "detail with plural variations untranslated",
+			args: []string{"--detail", "--lang", "ja"},
+			content: `{
+				"sourceLanguage": "en",
+				"strings": {
+					"%lld items": {
+						"localizations": {
+							"en": {
+								"variations": {
+									"plural": {
+										"one": {"stringUnit": {"state": "translated", "value": "%lld item"}},
+										"other": {"stringUnit": {"state": "translated", "value": "%lld items"}}
+									}
+								}
+							},
+							"ja": {
+								"variations": {
+									"plural": {
+										"other": {"stringUnit": {"state": "new", "value": ""}}
+									}
+								}
+							}
+						}
+					},
+					"greeting": {
+						"localizations": {
+							"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+							"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+						}
+					}
+				},
+				"version": "1.0"
+			}`,
+			shouldContain:    []string{"%lld items > ja > plural.other"},
+			shouldNotContain: []string{"greeting"},
+		},
+		{
+			name: "detail with substitutions untranslated",
+			args: []string{"--detail", "--lang", "ja"},
+			content: `{
+				"sourceLanguage": "en",
+				"strings": {
+					"%lld files in %lld folders": {
+						"localizations": {
+							"en": {
+								"stringUnit": {"state": "translated", "value": "%#@files@ in %#@folders@"},
+								"substitutions": {
+									"files": {
+										"argNum": 1, "formatSpecifier": "lld",
+										"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "%arg file"}}, "other": {"stringUnit": {"state": "translated", "value": "%arg files"}}}}
+									},
+									"folders": {
+										"argNum": 2, "formatSpecifier": "lld",
+										"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "%arg folder"}}, "other": {"stringUnit": {"state": "translated", "value": "%arg folders"}}}}
+									}
+								}
+							},
+							"ja": {
+								"stringUnit": {"state": "translated", "value": "%#@files@（%#@folders@内）"},
+								"substitutions": {
+									"files": {
+										"argNum": 1, "formatSpecifier": "lld",
+										"variations": {"plural": {"other": {"stringUnit": {"state": "new", "value": ""}}}}
+									},
+									"folders": {
+										"argNum": 2, "formatSpecifier": "lld",
+										"variations": {"plural": {"other": {"stringUnit": {"state": "translated", "value": "%arg個のフォルダ"}}}}
+									}
+								}
+							}
+						}
+					}
+				},
+				"version": "1.0"
+			}`,
+			shouldContain:    []string{"%lld files in %lld folders > ja > substitutions.files.plural.other"},
+			shouldNotContain: []string{"substitutions.folders"},
+		},
+		{
+			name: "detail with device variations untranslated",
+			args: []string{"--detail", "--lang", "ja"},
+			content: `{
+				"sourceLanguage": "en",
+				"strings": {
+					"welcome_message": {
+						"localizations": {
+							"en": {
+								"variations": {
+									"device": {
+										"iphone": {"stringUnit": {"state": "translated", "value": "Welcome iPhone"}},
+										"ipad": {"stringUnit": {"state": "translated", "value": "Welcome iPad"}},
+										"other": {"stringUnit": {"state": "translated", "value": "Welcome"}}
+									}
+								}
+							},
+							"ja": {
+								"variations": {
+									"device": {
+										"iphone": {"stringUnit": {"state": "new", "value": ""}},
+										"ipad": {"stringUnit": {"state": "translated", "value": "iPadへようこそ"}},
+										"other": {"stringUnit": {"state": "translated", "value": "ようこそ"}}
+									}
+								}
+							}
+						}
+					}
+				},
+				"version": "1.0"
+			}`,
+			shouldContain:    []string{"welcome_message > ja > device.iphone"},
+			shouldNotContain: []string{"device.ipad", "device.other"},
+		},
+		{
+			name: "detail with missing language",
+			args: []string{"--detail", "--lang", "fr"},
+			content: `{
+				"sourceLanguage": "en",
+				"strings": {
+					"greeting": {
+						"localizations": {
+							"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+							"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+						}
+					}
+				},
+				"version": "1.0"
+			}`,
+			shouldContain: []string{"greeting > fr > missing"},
+		},
+		{
+			name: "detail all translated shows nothing",
+			args: []string{"--detail", "--lang", "ja"},
+			content: `{
+				"sourceLanguage": "en",
+				"strings": {
+					"greeting": {
+						"localizations": {
+							"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+							"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+						}
+					}
+				},
+				"version": "1.0"
+			}`,
+			shouldContain: []string{"All keys are translated for language 'ja'"},
+		},
+		{
+			name: "detail without lang shows all languages",
+			args: []string{"--detail"},
+			content: `{
+				"sourceLanguage": "en",
+				"strings": {
+					"greeting": {
+						"localizations": {
+							"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+							"ja": {"stringUnit": {"state": "new", "value": ""}},
+							"es": {"stringUnit": {"state": "new", "value": ""}}
+						}
+					}
+				},
+				"version": "1.0"
+			}`,
+			shouldContain: []string{"greeting > ja > new", "greeting > es > new"},
+		},
+		{
+			name: "detail with prefix filter",
+			args: []string{"--detail", "--lang", "ja", "--prefix", "error"},
+			content: `{
+				"sourceLanguage": "en",
+				"strings": {
+					"error.network": {
+						"localizations": {
+							"en": {"stringUnit": {"state": "translated", "value": "Network Error"}},
+							"ja": {"stringUnit": {"state": "new", "value": ""}}
+						}
+					},
+					"greeting": {
+						"localizations": {
+							"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+							"ja": {"stringUnit": {"state": "new", "value": ""}}
+						}
+					}
+				},
+				"version": "1.0"
+			}`,
+			shouldContain:    []string{"error.network > ja"},
+			shouldNotContain: []string{"greeting"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filePath := test.TempFile(t, "test.xcstrings", tt.content)
+
+			cmd := &UntranslatedCommand{}
+			flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+			cmd.SetFlags(flagSet)
+
+			args := append([]string{"-f", filePath}, tt.args...)
+			err := flagSet.Parse(args)
+			test.AssertNoError(t, err)
+
+			output := captureOutput(func() {
+				status := cmd.Execute(context.Background(), flagSet)
+				test.AssertEqual(t, int(status), 0)
+			})
+
+			for _, expected := range tt.shouldContain {
+				if !strings.Contains(output, expected) {
+					t.Errorf("output should contain %q, got: %q", expected, output)
+				}
+			}
+			for _, notExpected := range tt.shouldNotContain {
+				if strings.Contains(output, notExpected) {
+					t.Errorf("output should not contain %q, got: %q", notExpected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestUntranslatedCommand_Execute_Detail_WithFixtures(t *testing.T) {
+	tests := []struct {
+		name             string
+		fixture          string
+		args             []string
+		shouldContain    []string
+		shouldNotContain []string
+	}{
+		{
+			name:          "plural variations fixture - detail for ja",
+			fixture:       "plural_variations_untranslated.xcstrings",
+			args:          []string{"--detail", "--lang", "ja"},
+			shouldContain: []string{"%lld items > ja > plural.other"},
+		},
+		{
+			name:          "substitutions fixture - detail for ja",
+			fixture:       "substitutions_untranslated.xcstrings",
+			args:          []string{"--detail", "--lang", "ja"},
+			shouldContain: []string{"%lld files in %lld folders > ja > substitutions.files.plural.other"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fixturePath := filepath.Join("../fixtures", tt.fixture)
+
+			cmd := &UntranslatedCommand{}
+			flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+			cmd.SetFlags(flagSet)
+
+			args := append([]string{"-f", fixturePath}, tt.args...)
+			err := flagSet.Parse(args)
+			test.AssertNoError(t, err)
+
+			output := captureOutput(func() {
+				status := cmd.Execute(context.Background(), flagSet)
+				test.AssertEqual(t, int(status), 0)
+			})
+
+			for _, expected := range tt.shouldContain {
+				if !strings.Contains(output, expected) {
+					t.Errorf("output should contain %q, got: %q", expected, output)
+				}
+			}
+			for _, notExpected := range tt.shouldNotContain {
+				if strings.Contains(output, notExpected) {
+					t.Errorf("output should not contain %q, got: %q", notExpected, output)
+				}
+			}
+		})
+	}
+}
+
 func TestUntranslatedCommand_Execute_WithFixtures(t *testing.T) {
 	tests := []struct {
 		name             string
