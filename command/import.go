@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -179,7 +180,9 @@ func importCSV(r io.Reader, xc *xcstrings.XCStrings, onMissingKey string, clearE
 			}
 
 			if err := setTranslation(xc, baseKey, lc.lang, value, variationPath); err != nil {
-				return nil, fmt.Errorf("failed to set translation for key %q lang %q: %w", baseKey, lc.lang, err)
+				log.Printf("Warning: skipping key %q lang %q: %v", baseKey, lc.lang, err)
+				summary.skipped++
+				continue
 			}
 			summary.updated++
 		}
@@ -252,8 +255,11 @@ func setTranslation(xc *xcstrings.XCStrings, key, lang, value, variationPath str
 	}
 
 	// Handle plural/device variations
-	opts := parseVariationOpts(parts)
-	_, err := xc.SetVariationTranslation(key, lang, value, opts)
+	opts, err := parseVariationOpts(parts)
+	if err != nil {
+		return err
+	}
+	_, err = xc.SetVariationTranslation(key, lang, value, opts)
 	return err
 }
 
@@ -422,15 +428,21 @@ func setVariationUnit(v *xcstrings.Variations, parts []string, unit *xcstrings.S
 
 // parseVariationOpts converts path parts to VariationOptions.
 // Supports: plural.X, device.X, device.X.plural.Y
-func parseVariationOpts(parts []string) xcstrings.VariationOptions {
+// Returns an error if parts contain unrecognized segments or have an odd length.
+func parseVariationOpts(parts []string) (xcstrings.VariationOptions, error) {
 	opts := xcstrings.VariationOptions{}
+	if len(parts)%2 != 0 {
+		return opts, fmt.Errorf("invalid variation path: odd number of segments %v", parts)
+	}
 	for i := 0; i < len(parts)-1; i += 2 {
 		switch parts[i] {
 		case "plural":
 			opts.Plural = parts[i+1]
 		case "device":
 			opts.Device = parts[i+1]
+		default:
+			return opts, fmt.Errorf("unrecognized variation segment %q in path %v", parts[i], parts)
 		}
 	}
-	return opts
+	return opts, nil
 }

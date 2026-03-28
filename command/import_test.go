@@ -628,6 +628,52 @@ func TestParseKeyBracket(t *testing.T) {
 	}
 }
 
+func TestParseVariationOpts_ValidPaths(t *testing.T) {
+	tests := []struct {
+		name       string
+		parts      []string
+		wantPlural string
+		wantDevice string
+	}{
+		{"plural only", []string{"plural", "one"}, "one", ""},
+		{"device only", []string{"device", "iphone"}, "", "iphone"},
+		{"device then plural", []string{"device", "iphone", "plural", "other"}, "other", "iphone"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := parseVariationOpts(tt.parts)
+			test.AssertNoError(t, err)
+			test.AssertEqual(t, opts.Plural, tt.wantPlural)
+			test.AssertEqual(t, opts.Device, tt.wantDevice)
+		})
+	}
+}
+
+func TestParseVariationOpts_InvalidExtraSegments(t *testing.T) {
+	// "plural.one.extra" => 3 parts, odd number => error
+	parts := []string{"plural", "one", "extra"}
+	_, err := parseVariationOpts(parts)
+	if err == nil {
+		t.Fatal("expected error for extra segments, got nil")
+	}
+	if !strings.Contains(err.Error(), "odd number of segments") {
+		t.Errorf("expected odd-segment error, got: %v", err)
+	}
+}
+
+func TestParseVariationOpts_UnknownSegment(t *testing.T) {
+	// "unknown.value" => unrecognized variation type
+	parts := []string{"unknown", "value"}
+	_, err := parseVariationOpts(parts)
+	if err == nil {
+		t.Fatal("expected error for unknown segment, got nil")
+	}
+	if !strings.Contains(err.Error(), "unrecognized variation segment") {
+		t.Errorf("expected unrecognized-segment error, got: %v", err)
+	}
+}
+
 func TestParseHeader(t *testing.T) {
 	header := []string{"key", "comment", "shouldTranslate", "en:state", "en", "ja:state", "ja"}
 	cols, err := parseHeader(header)
