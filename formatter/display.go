@@ -46,6 +46,18 @@ func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
 				} else {
 					fmt.Printf("  %s: missing\n", lang)
 				}
+				if localization.Substitutions != nil {
+					subNames := make([]string, 0, len(localization.Substitutions))
+					for name := range localization.Substitutions {
+						subNames = append(subNames, name)
+					}
+					sort.Strings(subNames)
+					for _, name := range subNames {
+						sub := localization.Substitutions[name]
+						fmt.Printf("    substitutions.%s:\n", name)
+						printSubstitutionVariations(&sub.Variations, "      ")
+					}
+				}
 			} else {
 				fmt.Printf("  %s: missing\n", lang)
 			}
@@ -124,6 +136,24 @@ func displayPluralVariations(lang, prefix string, plural map[xcstrings.PluralCat
 			fmt.Printf("%s.plural.%s: %s - %s\n", prefix, cat, state, value)
 		} else {
 			fmt.Printf("    plural.%s: %s - %s\n", cat, state, value)
+		}
+	}
+}
+
+// printSubstitutionVariations renders substitution variation leaves with the given indent.
+func printSubstitutionVariations(v *xcstrings.Variations, indent string) {
+	if v.Plural != nil {
+		categories := make([]string, 0, len(v.Plural))
+		for cat := range v.Plural {
+			categories = append(categories, cat)
+		}
+		sort.Strings(categories)
+		for _, cat := range categories {
+			vv := v.Plural[cat]
+			if vv == nil || vv.StringUnit == nil {
+				continue
+			}
+			fmt.Printf("%splural.%s: %s - %s\n", indent, cat, vv.StringUnit.State, vv.StringUnit.Value)
 		}
 	}
 }

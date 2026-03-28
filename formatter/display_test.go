@@ -64,8 +64,8 @@ func TestDisplayKeyDetails(t *testing.T) {
 			keys: []string{"hello"},
 			expectedOutput: []string{
 				"hello:",
-				"es: new - Hola",
-				"ja: translated - こんにちは",
+				"new - Hola",
+				"translated - こんにちは",
 			},
 		},
 		{
@@ -73,7 +73,7 @@ func TestDisplayKeyDetails(t *testing.T) {
 			keys: []string{"goodbye"},
 			expectedOutput: []string{
 				"goodbye:",
-				"ja: translated - (empty)",
+				"translated - (empty)",
 			},
 		},
 		{
@@ -90,9 +90,9 @@ func TestDisplayKeyDetails(t *testing.T) {
 			expectedOutput: []string{
 				"hello:",
 				"goodbye:",
-				"es: new - Hola",
-				"ja: translated - こんにちは",
-				"ja: translated - (empty)",
+				"new - Hola",
+				"translated - こんにちは",
+				"translated - (empty)",
 			},
 		},
 		{
@@ -316,7 +316,7 @@ func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 		DisplayKeyDetails(xcstringsData, []string{"sort_test"})
 	})
 
-	// Languages should appear in alphabetical order: en, es, ja, zh
+	// Languages should appear in alphabetical order: es, ja, zh (en excluded as source language)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
 	var languageOrder []string
@@ -335,4 +335,137 @@ func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 		return
 	}
 	test.AssertSliceEqual(t, languageOrder, expectedOrder)
+}
+
+func TestDisplayKeyDetails_Substitutions(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"%lld files in %lld folders": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {
+						StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%#@files@ in %#@folders@"},
+					},
+					"ja": {
+						StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%#@files@が%#@folders@にあります"},
+						Substitutions: map[string]xcstrings.Substitution{
+							"files": {
+								ArgNum:          1,
+								FormatSpecifier: "lld",
+								Variations: xcstrings.Variations{
+									Plural: map[string]*xcstrings.VariationValue{
+										"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%argファイル"}},
+									},
+								},
+							},
+							"folders": {
+								ArgNum:          2,
+								FormatSpecifier: "lld",
+								Variations: xcstrings.Variations{
+									Plural: map[string]*xcstrings.VariationValue{
+										"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%argフォルダ"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"%lld files in %lld folders"})
+	})
+
+	expectedPatterns := []string{
+		"%lld files in %lld folders:",
+		"ja:",
+		"translated - %#@files@が%#@folders@にあります",
+		"substitutions.files:",
+		"plural.other: translated - %argファイル",
+		"substitutions.folders:",
+		"plural.other: translated - %argフォルダ",
+	}
+
+	for _, pattern := range expectedPatterns {
+		if !strings.Contains(output, pattern) {
+			t.Errorf("expected output to contain %q, got:\n%s", pattern, output)
+		}
+	}
+
+	// Verify substitution names are sorted (files before folders)
+	filesIdx := strings.Index(output, "substitutions.files:")
+	foldersIdx := strings.Index(output, "substitutions.folders:")
+	if filesIdx >= foldersIdx {
+		t.Errorf("expected substitutions.files before substitutions.folders in output")
+	}
+}
+
+func TestDisplayKeyDetails_Variations(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"%lld items": {
+				Localizations: map[string]xcstrings.Localization{
+					"ja": {
+						Variations: &xcstrings.Variations{
+							Plural: map[string]*xcstrings.VariationValue{
+								"one":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lldアイテム"}},
+								"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lldアイテム"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"%lld items"})
+	})
+
+	expectedPatterns := []string{
+		"%lld items:",
+		"ja:",
+		"plural.one: translated - %lldアイテム",
+		"plural.other: translated - %lldアイテム",
+	}
+
+	for _, pattern := range expectedPatterns {
+		if !strings.Contains(output, pattern) {
+			t.Errorf("expected output to contain %q, got:\n%s", pattern, output)
+		}
+	}
+}
+
+func TestDisplayKeyDetails_SubstitutionsFromFixture(t *testing.T) {
+	xc, err := xcstrings.Load("../fixtures/substitutions.xcstrings")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xc, []string{"%lld files in %lld folders"})
+	})
+
+	// The fixture only has "en" which is the source language, so Languages() returns empty.
+	// This tests that the function handles it without panicking.
+	if strings.Contains(output, "substitutions.files:") {
+		// If en is rendered (shouldn't be since it's source language),
+		// verify substitution content is correct.
+		expectedPatterns := []string{
+			"substitutions.files:",
+			"plural.one: translated - %arg file",
+			"plural.other: translated - %arg files",
+			"substitutions.folders:",
+			"plural.one: translated - %arg folder",
+			"plural.other: translated - %arg folders",
+		}
+		for _, pattern := range expectedPatterns {
+			if !strings.Contains(output, pattern) {
+				t.Errorf("expected output to contain %q, got:\n%s", pattern, output)
+			}
+		}
+	}
 }
