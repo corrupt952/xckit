@@ -165,6 +165,138 @@ func TestDisplayKeyDetails_OutputFormat(t *testing.T) {
 	}
 }
 
+func TestDisplayKeyDetails_DeviceVariations(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"welcome_message": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {
+						Variations: &xcstrings.Variations{
+							Device: map[string]*xcstrings.VariationValue{
+								"iphone": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Welcome to our iPhone app!"}},
+								"ipad":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Welcome to our iPad app!"}},
+								"other":  {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Welcome to our app!"}},
+							},
+						},
+					},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "ようこそ"}},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"welcome_message"})
+	})
+
+	expectedPatterns := []string{
+		"welcome_message:",
+		"device.ipad: translated - Welcome to our iPad app!",
+		"device.iphone: translated - Welcome to our iPhone app!",
+		"device.other: translated - Welcome to our app!",
+		"ja: translated - ようこそ",
+	}
+
+	for _, expected := range expectedPatterns {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+		}
+	}
+}
+
+func TestDisplayKeyDetails_NestedDevicePluralVariations(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"%lld photos": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {
+						Variations: &xcstrings.Variations{
+							Device: map[string]*xcstrings.VariationValue{
+								"iphone": {
+									Variations: &xcstrings.Variations{
+										Plural: map[string]*xcstrings.VariationValue{
+											"one":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld photo on iPhone"}},
+											"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld photos on iPhone"}},
+										},
+									},
+								},
+								"other": {
+									Variations: &xcstrings.Variations{
+										Plural: map[string]*xcstrings.VariationValue{
+											"one":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld photo"}},
+											"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld photos"}},
+										},
+									},
+								},
+							},
+						},
+					},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld枚の写真"}},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"%lld photos"})
+	})
+
+	expectedPatterns := []string{
+		"%lld photos:",
+		"device.iphone.plural.one: translated - %lld photo on iPhone",
+		"device.iphone.plural.other: translated - %lld photos on iPhone",
+		"device.other.plural.one: translated - %lld photo",
+		"device.other.plural.other: translated - %lld photos",
+		"ja: translated - %lld枚の写真",
+	}
+
+	for _, expected := range expectedPatterns {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+		}
+	}
+}
+
+func TestDisplayKeyDetails_PluralVariations(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"%lld items": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {
+						Variations: &xcstrings.Variations{
+							Plural: map[string]*xcstrings.VariationValue{
+								"one":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld item"}},
+								"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld items"}},
+							},
+						},
+					},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld個"}},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"%lld items"})
+	})
+
+	expectedPatterns := []string{
+		"%lld items:",
+		"plural.one: translated - %lld item",
+		"plural.other: translated - %lld items",
+		"ja: translated - %lld個",
+	}
+
+	for _, expected := range expectedPatterns {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+		}
+	}
+}
+
 func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 	xcstringsData := &xcstrings.XCStrings{
 		SourceLanguage: "en",
