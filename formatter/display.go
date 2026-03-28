@@ -44,7 +44,7 @@ func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
 				} else if localization.Variations != nil {
 					displayVariations(lang, localization.Variations)
 				} else {
-					fmt.Printf("  %s: missing\n", lang)
+					fmt.Printf("  %s: (no content)\n", lang)
 				}
 				if localization.Substitutions != nil {
 					subNames := make([]string, 0, len(localization.Substitutions))
