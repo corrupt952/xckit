@@ -11,6 +11,7 @@ import (
 )
 
 func main() {
+	subcommands.Register(&command.ExportCommand{}, "")
 	subcommands.Register(&command.UntranslatedCommand{}, "")
 	subcommands.Register(&command.ListCommand{}, "")
 	subcommands.Register(&command.SetCommand{}, "")
