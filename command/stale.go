@@ -59,7 +59,11 @@ func (c *StaleCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfac
 		}
 
 		count := xcstrings.RemoveStaleKeys()
-		if err := xcstrings.SaveToFile(c.filePath); err != nil {
+		filePath := c.filePath
+		if filePath == "" {
+			filePath = c.findXCStringsFile()
+		}
+		if err := xcstrings.SaveToFile(filePath); err != nil {
 			fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 			return subcommands.ExitFailure
 		}
