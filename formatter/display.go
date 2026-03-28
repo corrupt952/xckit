@@ -81,8 +81,14 @@ func displayStringUnit(lang, prefix string, su *xcstrings.StringUnit) {
 func displayVariations(lang string, v *xcstrings.Variations) {
 	if v.Device != nil {
 		displayDeviceVariations(lang, v.Device)
-	} else if v.Plural != nil {
-		displayPluralVariations(lang, "", v.Plural)
+	}
+	if v.Plural != nil {
+		if v.Device != nil {
+			// Language header already printed by displayDeviceVariations
+			displayPluralVariations("", "    ", v.Plural)
+		} else {
+			displayPluralVariations(lang, "", v.Plural)
+		}
 	}
 }
 
