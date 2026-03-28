@@ -421,6 +421,8 @@ func (x *XCStrings) KeysWithAnyUntranslated() []string {
 }
 
 // NeedsReviewKeys returns keys that have needs_review state for the given language.
+// A key needs review if any leaf StringUnit (including within variations and
+// substitutions) has the "needs_review" state.
 func (x *XCStrings) NeedsReviewKeys(language string) []string {
 	var keys []string
 	for key, def := range x.Strings {
@@ -428,8 +430,14 @@ func (x *XCStrings) NeedsReviewKeys(language string) []string {
 			continue
 		}
 		loc, exists := def.Localizations[language]
-		if exists && loc.StringUnit != nil && loc.StringUnit.State == "needs_review" {
-			keys = append(keys, key)
+		if !exists {
+			continue
+		}
+		for _, u := range loc.AllStringUnits() {
+			if u.State == "needs_review" {
+				keys = append(keys, key)
+				break
+			}
 		}
 	}
 	return keys

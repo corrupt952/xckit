@@ -684,6 +684,97 @@ func TestXCStrings_NeedsReviewKeys(t *testing.T) {
 	})
 }
 
+func TestXCStrings_NeedsReviewKeys_Variations(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"plural_needs_review": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"one":   {StringUnit: &StringUnit{State: "translated", Value: "1個"}},
+								"other": {StringUnit: &StringUnit{State: "needs_review", Value: "%d個"}},
+							},
+						},
+					},
+				},
+			},
+			"plural_all_translated": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"one":   {StringUnit: &StringUnit{State: "translated", Value: "1件"}},
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%d件"}},
+							},
+						},
+					},
+				},
+			},
+			"substitution_needs_review": {
+				Localizations: map[string]Localization{
+					"ja": {
+						StringUnit: &StringUnit{State: "translated", Value: "%#@files@を開く"},
+						Substitutions: map[string]Substitution{
+							"files": {
+								ArgNum:          1,
+								FormatSpecifier: "lld",
+								Variations: Variations{
+									Plural: map[PluralCategory]*VariationValue{
+										"one":   {StringUnit: &StringUnit{State: "translated", Value: "1個のファイル"}},
+										"other": {StringUnit: &StringUnit{State: "needs_review", Value: "%lld個のファイル"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	t.Run("detects needs_review inside plural variations", func(t *testing.T) {
+		got := xcstrings.NeedsReviewKeys("ja")
+		sort.Strings(got)
+
+		found := false
+		for _, key := range got {
+			if key == "plural_needs_review" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected plural_needs_review to be returned")
+		}
+	})
+
+	t.Run("excludes fully translated plural variations", func(t *testing.T) {
+		got := xcstrings.NeedsReviewKeys("ja")
+		for _, key := range got {
+			if key == "plural_all_translated" {
+				t.Error("plural_all_translated should not be in needs_review keys")
+			}
+		}
+	})
+
+	t.Run("detects needs_review inside substitutions", func(t *testing.T) {
+		got := xcstrings.NeedsReviewKeys("ja")
+
+		found := false
+		for _, key := range got {
+			if key == "substitution_needs_review" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected substitution_needs_review to be returned")
+		}
+	})
+}
+
 func TestXCStrings_StaleKeys(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",
