@@ -16,12 +16,16 @@ func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
 		definition := x.Strings[key]
 		for _, lang := range languages {
 			if localization, exists := definition.Localizations[lang]; exists {
-				state := localization.StringUnit.State
-				value := localization.StringUnit.Value
-				if value == "" {
-					value = "(empty)"
+				if localization.StringUnit != nil {
+					state := localization.StringUnit.State
+					value := localization.StringUnit.Value
+					if value == "" {
+						value = "(empty)"
+					}
+					fmt.Printf("  %s: %s - %s\n", lang, state, value)
+				} else {
+					fmt.Printf("  %s: (variations)\n", lang)
 				}
-				fmt.Printf("  %s: %s - %s\n", lang, state, value)
 			} else {
 				fmt.Printf("  %s: missing\n", lang)
 			}
