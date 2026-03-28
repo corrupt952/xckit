@@ -97,6 +97,179 @@ func TestListCommand_Execute(t *testing.T) {
 	}
 }
 
+func TestListCommand_Execute_PluralVariations(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"%lld items": {
+				"localizations": {
+					"en": {
+						"variations": {
+							"plural": {
+								"one": {"stringUnit": {"state": "translated", "value": "%lld item"}},
+								"other": {"stringUnit": {"state": "translated", "value": "%lld items"}}
+							}
+						}
+					},
+					"ja": {
+						"variations": {
+							"plural": {
+								"other": {"stringUnit": {"state": "translated", "value": "%lld個のアイテム"}}
+							}
+						}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &ListCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	expectedStrings := []string{
+		"%lld items:",
+		"plural.one:",
+		"plural.other:",
+		"%lld item",
+		"%lld items",
+		"%lld個のアイテム",
+	}
+	for _, expected := range expectedStrings {
+		if !strings.Contains(output, expected) {
+			t.Errorf("output should contain %q, got: %q", expected, output)
+		}
+	}
+}
+
+func TestListCommand_Execute_DeviceVariations(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"welcome_message": {
+				"localizations": {
+					"en": {
+						"variations": {
+							"device": {
+								"iphone": {"stringUnit": {"state": "translated", "value": "Welcome to our iPhone app!"}},
+								"ipad": {"stringUnit": {"state": "translated", "value": "Welcome to our iPad app!"}},
+								"other": {"stringUnit": {"state": "translated", "value": "Welcome to our app!"}}
+							}
+						}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &ListCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	expectedStrings := []string{
+		"welcome_message:",
+		"device.iphone:",
+		"device.ipad:",
+		"device.other:",
+		"Welcome to our iPhone app!",
+		"Welcome to our iPad app!",
+		"Welcome to our app!",
+	}
+	for _, expected := range expectedStrings {
+		if !strings.Contains(output, expected) {
+			t.Errorf("output should contain %q, got: %q", expected, output)
+		}
+	}
+}
+
+func TestListCommand_Execute_Substitutions(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"%lld files in %lld folders": {
+				"localizations": {
+					"en": {
+						"stringUnit": {"state": "translated", "value": "%#@files@ in %#@folders@"},
+						"substitutions": {
+							"files": {
+								"argNum": 1,
+								"formatSpecifier": "lld",
+								"variations": {
+									"plural": {
+										"one": {"stringUnit": {"state": "translated", "value": "%arg file"}},
+										"other": {"stringUnit": {"state": "translated", "value": "%arg files"}}
+									}
+								}
+							},
+							"folders": {
+								"argNum": 2,
+								"formatSpecifier": "lld",
+								"variations": {
+									"plural": {
+										"one": {"stringUnit": {"state": "translated", "value": "%arg folder"}},
+										"other": {"stringUnit": {"state": "translated", "value": "%arg folders"}}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &ListCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	expectedStrings := []string{
+		"%lld files in %lld folders:",
+		"substitutions.files:",
+		"substitutions.folders:",
+		"plural.one:",
+		"plural.other:",
+		"%arg file",
+		"%arg files",
+		"%arg folder",
+		"%arg folders",
+	}
+	for _, expected := range expectedStrings {
+		if !strings.Contains(output, expected) {
+			t.Errorf("output should contain %q, got: %q", expected, output)
+		}
+	}
+}
+
 func TestListCommand_Execute_FileNotFound(t *testing.T) {
 	cmd := &ListCommand{}
 
