@@ -684,6 +684,93 @@ func TestXCStrings_NeedsReviewKeys(t *testing.T) {
 	})
 }
 
+func TestXCStrings_StaleKeys(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"active_key": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Active"}},
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "アクティブ"}},
+				},
+			},
+			"stale_key": {
+				ExtractionState: "stale",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Stale"}},
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "古い"}},
+				},
+			},
+			"another_stale": {
+				ExtractionState: "stale",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Another"}},
+				},
+			},
+			"manual_key": {
+				ExtractionState: "manual",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Manual"}},
+				},
+			},
+		},
+	}
+
+	t.Run("StaleKeys returns only stale keys", func(t *testing.T) {
+		got := xcstrings.StaleKeys()
+		sort.Strings(got)
+		want := []string{"another_stale", "stale_key"}
+		test.AssertSliceEqual(t, got, want)
+	})
+
+	t.Run("ActiveKeys returns non-stale keys", func(t *testing.T) {
+		got := xcstrings.ActiveKeys()
+		sort.Strings(got)
+		want := []string{"active_key", "manual_key"}
+		test.AssertSliceEqual(t, got, want)
+	})
+
+	t.Run("IsStale returns true for stale keys", func(t *testing.T) {
+		test.AssertEqual(t, xcstrings.IsStale("stale_key"), true)
+		test.AssertEqual(t, xcstrings.IsStale("active_key"), false)
+		test.AssertEqual(t, xcstrings.IsStale("nonexistent"), false)
+	})
+
+	t.Run("UntranslatedKeys excludes stale keys", func(t *testing.T) {
+		// another_stale is missing ja but should not appear since it's stale
+		got := xcstrings.UntranslatedKeys("ja")
+		sort.Strings(got)
+		want := []string{"manual_key"}
+		test.AssertSliceEqual(t, got, want)
+	})
+
+	t.Run("KeysWithAnyUntranslated excludes stale keys", func(t *testing.T) {
+		got := xcstrings.KeysWithAnyUntranslated()
+		sort.Strings(got)
+		// manual_key is missing ja, so it should appear
+		// another_stale is missing ja but is stale, so it should NOT appear
+		want := []string{"manual_key"}
+		test.AssertSliceEqual(t, got, want)
+	})
+
+	t.Run("RemoveStaleKeys removes stale and returns count", func(t *testing.T) {
+		// Create a copy to avoid mutating the shared test struct
+		x := &XCStrings{
+			SourceLanguage: "en",
+			Strings: map[string]StringDefinition{
+				"keep":   {Localizations: map[string]Localization{}},
+				"remove": {ExtractionState: "stale", Localizations: map[string]Localization{}},
+			},
+		}
+		count := x.RemoveStaleKeys()
+		test.AssertEqual(t, count, 1)
+		test.AssertEqual(t, len(x.Strings), 1)
+		if _, exists := x.Strings["remove"]; exists {
+			t.Error("stale key should have been removed")
+		}
+	})
+}
+
 func TestXCStrings_GetTranslatedKeys(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",
