@@ -27,7 +27,7 @@ func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
 			langSet[l] = true
 		}
 		for l, loc := range definition.Localizations {
-			if loc.Variations != nil {
+			if loc.Variations != nil || loc.Substitutions != nil {
 				langSet[l] = true
 			}
 		}
