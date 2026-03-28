@@ -142,9 +142,9 @@ func TestDisplayKeyDetails_OutputFormat(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
-	// Check basic structure (1 key line + at least 1 language line + at least 1 value line)
-	if len(lines) < 3 {
-		t.Errorf("expected at least 3 lines of output, got %d", len(lines))
+	// Check basic structure (1 key line + at least 1 language line)
+	if len(lines) < 2 {
+		t.Errorf("expected at least 2 lines of output, got %d", len(lines))
 	}
 
 	// First line should be key name
@@ -152,25 +152,148 @@ func TestDisplayKeyDetails_OutputFormat(t *testing.T) {
 		t.Errorf("first line should contain key name, got: %q", lines[0])
 	}
 
-	// Check that language lines and value lines are present and indented
-	hasLangLine := false
-	hasValueLine := false
-	for _, line := range lines[1:] {
-		if !strings.HasPrefix(line, "  ") {
-			t.Errorf("line should be indented, got: %q", line)
+	// Subsequent lines should be indented with language info
+	for i := 1; i < len(lines); i++ {
+		if !strings.HasPrefix(lines[i], "  ") {
+			t.Errorf("line %d should be indented, got: %q", i+1, lines[i])
 		}
-		if strings.HasPrefix(line, "  ") && strings.Contains(line, ":") && !strings.Contains(line, " - ") {
-			hasLangLine = true
-		}
-		if strings.Contains(line, " - ") {
-			hasValueLine = true
+
+		// Should contain language code and state
+		if !strings.Contains(lines[i], ":") || !strings.Contains(lines[i], " - ") {
+			t.Errorf("line %d should contain language info format, got: %q", i+1, lines[i])
 		}
 	}
-	if !hasLangLine {
-		t.Error("expected at least one language line")
+}
+
+func TestDisplayKeyDetails_DeviceVariations(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"welcome_message": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {
+						Variations: &xcstrings.Variations{
+							Device: map[string]*xcstrings.VariationValue{
+								"iphone": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Welcome to our iPhone app!"}},
+								"ipad":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Welcome to our iPad app!"}},
+								"other":  {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Welcome to our app!"}},
+							},
+						},
+					},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "ようこそ"}},
+				},
+			},
+		},
 	}
-	if !hasValueLine {
-		t.Error("expected at least one value line with state and value")
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"welcome_message"})
+	})
+
+	expectedPatterns := []string{
+		"welcome_message:",
+		"device.ipad: translated - Welcome to our iPad app!",
+		"device.iphone: translated - Welcome to our iPhone app!",
+		"device.other: translated - Welcome to our app!",
+		"ja: translated - ようこそ",
+	}
+
+	for _, expected := range expectedPatterns {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+		}
+	}
+}
+
+func TestDisplayKeyDetails_NestedDevicePluralVariations(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"%lld photos": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {
+						Variations: &xcstrings.Variations{
+							Device: map[string]*xcstrings.VariationValue{
+								"iphone": {
+									Variations: &xcstrings.Variations{
+										Plural: map[string]*xcstrings.VariationValue{
+											"one":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld photo on iPhone"}},
+											"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld photos on iPhone"}},
+										},
+									},
+								},
+								"other": {
+									Variations: &xcstrings.Variations{
+										Plural: map[string]*xcstrings.VariationValue{
+											"one":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld photo"}},
+											"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld photos"}},
+										},
+									},
+								},
+							},
+						},
+					},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld枚の写真"}},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"%lld photos"})
+	})
+
+	expectedPatterns := []string{
+		"%lld photos:",
+		"device.iphone.plural.one: translated - %lld photo on iPhone",
+		"device.iphone.plural.other: translated - %lld photos on iPhone",
+		"device.other.plural.one: translated - %lld photo",
+		"device.other.plural.other: translated - %lld photos",
+		"ja: translated - %lld枚の写真",
+	}
+
+	for _, expected := range expectedPatterns {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+		}
+	}
+}
+
+func TestDisplayKeyDetails_PluralVariations(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"%lld items": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {
+						Variations: &xcstrings.Variations{
+							Plural: map[string]*xcstrings.VariationValue{
+								"one":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld item"}},
+								"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld items"}},
+							},
+						},
+					},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "%lld個"}},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"%lld items"})
+	})
+
+	expectedPatterns := []string{
+		"%lld items:",
+		"plural.one: translated - %lld item",
+		"plural.other: translated - %lld items",
+		"ja: translated - %lld個",
+	}
+
+	for _, expected := range expectedPatterns {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+		}
 	}
 }
 
@@ -198,11 +321,11 @@ func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 
 	var languageOrder []string
 	for _, line := range lines[1:] { // Skip the key name line
-		// Language lines are indented with 2 spaces and end with ":"
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && strings.HasSuffix(trimmed, ":") {
-			lang := strings.TrimSuffix(trimmed, ":")
-			languageOrder = append(languageOrder, lang)
+		if strings.HasPrefix(line, "  ") {
+			parts := strings.Split(strings.TrimSpace(line), ":")
+			if len(parts) > 0 {
+				languageOrder = append(languageOrder, parts[0])
+			}
 		}
 	}
 

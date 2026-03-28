@@ -771,6 +771,206 @@ func TestXCStrings_StaleKeys(t *testing.T) {
 	})
 }
 
+func TestLocalization_AllStringUnits(t *testing.T) {
+	t.Run("top-level StringUnit only", func(t *testing.T) {
+		loc := Localization{
+			StringUnit: &StringUnit{State: "translated", Value: "Hello"},
+		}
+		units := loc.AllStringUnits()
+		if len(units) != 1 {
+			t.Fatalf("expected 1 unit, got %d", len(units))
+		}
+		test.AssertEqual(t, units[0].Value, "Hello")
+	})
+
+	t.Run("plural variations", func(t *testing.T) {
+		loc := Localization{
+			Variations: &Variations{
+				Plural: map[PluralCategory]*VariationValue{
+					"one":   {StringUnit: &StringUnit{State: "translated", Value: "1 item"}},
+					"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld items"}},
+				},
+			},
+		}
+		units := loc.AllStringUnits()
+		if len(units) != 2 {
+			t.Fatalf("expected 2 units, got %d", len(units))
+		}
+	})
+
+	t.Run("substitutions", func(t *testing.T) {
+		loc := Localization{
+			StringUnit: &StringUnit{State: "translated", Value: "%#@files@"},
+			Substitutions: map[string]Substitution{
+				"files": {
+					ArgNum:          1,
+					FormatSpecifier: "lld",
+					Variations: Variations{
+						Plural: map[PluralCategory]*VariationValue{
+							"one":   {StringUnit: &StringUnit{State: "translated", Value: "%arg file"}},
+							"other": {StringUnit: &StringUnit{State: "translated", Value: "%arg files"}},
+						},
+					},
+				},
+			},
+		}
+		units := loc.AllStringUnits()
+		// 1 top-level + 2 from substitution
+		if len(units) != 3 {
+			t.Fatalf("expected 3 units, got %d", len(units))
+		}
+	})
+
+	t.Run("empty localization", func(t *testing.T) {
+		loc := Localization{}
+		units := loc.AllStringUnits()
+		if len(units) != 0 {
+			t.Fatalf("expected 0 units, got %d", len(units))
+		}
+	})
+}
+
+func TestUntranslatedKeys_WithVariations(t *testing.T) {
+	xc := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"all_translated_plural": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld個"}},
+							},
+						},
+					},
+				},
+			},
+			"partial_plural": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"one":   {StringUnit: &StringUnit{State: "new", Value: ""}},
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld個"}},
+							},
+						},
+					},
+				},
+			},
+			"simple_translated": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "翻訳済み"}},
+				},
+			},
+		},
+	}
+
+	got := xc.UntranslatedKeys("ja")
+	sort.Strings(got)
+	want := []string{"partial_plural"}
+	test.AssertSliceEqual(t, got, want)
+}
+
+func TestTranslatedKeys_WithVariations(t *testing.T) {
+	xc := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"all_translated_plural": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld個"}},
+							},
+						},
+					},
+				},
+			},
+			"partial_plural": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"one":   {StringUnit: &StringUnit{State: "new", Value: ""}},
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld個"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got := xc.TranslatedKeys("ja")
+	sort.Strings(got)
+	want := []string{"all_translated_plural"}
+	test.AssertSliceEqual(t, got, want)
+}
+
+func TestKeysWithAnyUntranslated_WithVariations(t *testing.T) {
+	xc := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"all_translated": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld個"}},
+							},
+						},
+					},
+				},
+			},
+			"partial_variation": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"one":   {StringUnit: &StringUnit{State: "new", Value: ""}},
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld個"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got := xc.KeysWithAnyUntranslated()
+	sort.Strings(got)
+	want := []string{"partial_variation"}
+	test.AssertSliceEqual(t, got, want)
+}
+
+func TestUntranslatedKeys_WithPluralVariationsFixture(t *testing.T) {
+	xc, err := Load("../fixtures/plural_variations.xcstrings")
+	test.AssertNoError(t, err)
+
+	// All variations in the fixture are "translated", so no untranslated keys expected
+	got := xc.UntranslatedKeys("ja")
+	if len(got) != 0 {
+		t.Errorf("expected 0 untranslated keys for ja, got %d: %v", len(got), got)
+	}
+
+	got = xc.UntranslatedKeys("en")
+	if len(got) != 0 {
+		t.Errorf("expected 0 untranslated keys for en, got %d: %v", len(got), got)
+	}
+
+	// TranslatedKeys should return the key for both languages
+	translated := xc.TranslatedKeys("ja")
+	sort.Strings(translated)
+	want := []string{"%lld items"}
+	test.AssertSliceEqual(t, translated, want)
+
+	translated = xc.TranslatedKeys("en")
+	sort.Strings(translated)
+	test.AssertSliceEqual(t, translated, want)
+}
+
 func TestXCStrings_GetTranslatedKeys(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",
