@@ -2,6 +2,8 @@
 
 CLI tool for managing Xcode String Catalogs (.xcstrings).
 
+---
+
 ## Key Features
 
 - List, filter, and inspect translation keys
@@ -13,7 +15,9 @@ CLI tool for managing Xcode String Catalogs (.xcstrings).
 - `needs_review` and `stale` state recognition
 - Stale key management (list, remove, dry-run)
 - Atomic file writes for data safety
-- Single Go binary -- no Xcode required, works on Linux CI
+- Single Go binary — no Xcode required, works on Linux CI
+
+---
 
 ## Installation
 
@@ -34,6 +38,8 @@ git clone https://github.com/corrupt952/xckit.git
 cd xckit
 make build
 ```
+
+---
 
 ## Quick Start
 
@@ -59,6 +65,8 @@ xckit export --format csv -f MyApp.xcstrings -o translations.csv
 # Import translations from CSV
 xckit import --format csv -f MyApp.xcstrings translations.csv
 ```
+
+---
 
 ## Commands Reference
 
@@ -142,6 +150,8 @@ xckit stale [-f file.xcstrings] [--remove] [--dry-run]
 
 Lists keys with `extractionState: stale`. Use `--remove` to delete them from the catalog, and `--dry-run` to preview without writing.
 
+---
+
 ## Usage Examples
 
 ### Export, translate, import workflow
@@ -163,7 +173,10 @@ xckit import --format csv -f Localizable.xcstrings --backup translations.csv
 
 ```bash
 # Fail the build if any Japanese translations are missing
-xckit untranslated --lang ja -f Localizable.xcstrings && echo "Untranslated keys found" && exit 1
+if xckit untranslated --lang ja -f Localizable.xcstrings | grep -q .; then
+  echo "Untranslated keys found"
+  exit 1
+fi
 
 # Check overall progress
 xckit status -f Localizable.xcstrings
@@ -172,12 +185,15 @@ xckit status -f Localizable.xcstrings
 xckit stale --remove -f Localizable.xcstrings
 ```
 
+---
+
 ## Why xckit?
 
-- **Single binary**: Distributed as a standalone Go binary. No Xcode installation needed.
-- **CSV round-trip**: Export to CSV, hand off to translators or edit in a spreadsheet, then import back. Variations, substitutions, and nested structures are preserved.
-- **Full variation support**: Plural categories, device variations, nested device-plural combinations, and substitutions are first-class citizens.
-- **CI-friendly**: Runs on macOS and Linux. Detect untranslated keys, enforce translation coverage, and clean up stale keys in your pipeline.
+xckit is a single Go binary — no Xcode needed, runs on Linux CI.
+
+It covers the full workflow: inspect keys, set translations including plural and device variations, check progress, export to CSV for translators, and import back. Stale and needs_review states are tracked alongside the standard untranslated state.
+
+---
 
 ## Development
 
@@ -198,6 +214,8 @@ make build
 ```bash
 make coverage
 ```
+
+---
 
 ## License
 
