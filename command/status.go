@@ -64,7 +64,38 @@ func (c *StatusCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 			percentage = float64(translated) / float64(activeKeys) * 100
 		}
 
-		fmt.Printf("%-6s: %3d/%d translated, %d needs_review (%.1f%%)\n", lang, translated, activeKeys, len(needsReview), percentage)
+		totalUnits := 0
+		translatedUnits := 0
+		for _, key := range xcstrings.ActiveKeys() {
+			def := xcstrings.Strings[key]
+			if def.ShouldTranslate != nil && *def.ShouldTranslate == false {
+				continue
+			}
+			loc, exists := def.Localizations[lang]
+			if !exists {
+				totalUnits++
+				continue
+			}
+			units := loc.AllStringUnits()
+			if len(units) == 0 {
+				totalUnits++
+				continue
+			}
+			totalUnits += len(units)
+			for _, u := range units {
+				if u.State == "translated" {
+					translatedUnits++
+				}
+			}
+		}
+		unitsPercentage := float64(0)
+		if totalUnits > 0 {
+			unitsPercentage = float64(translatedUnits) / float64(totalUnits) * 100
+		}
+
+		fmt.Printf("%-6s: Keys %3d/%d (%.1f%%), Strings %3d/%d (%.1f%%), %d needs_review\n",
+			lang, translated, activeKeys, percentage,
+			translatedUnits, totalUnits, unitsPercentage, len(needsReview))
 	}
 
 	return subcommands.ExitSuccess
