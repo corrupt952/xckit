@@ -381,6 +381,111 @@ func (x *XCStrings) TranslatedKeys(language string) []string {
 	return translated
 }
 
+// UntranslatedDetail represents a single untranslated leaf with its path.
+type UntranslatedDetail struct {
+	Key      string
+	Language string
+	Path     string // e.g. "plural.other", "device.iphone.plural.one", "substitutions.files.plural.one"
+}
+
+// UntranslatedDetailsForLanguage returns detailed paths for all untranslated
+// leaf string units for a given language across all keys.
+func (x *XCStrings) UntranslatedDetailsForLanguage(language string) []UntranslatedDetail {
+	var details []UntranslatedDetail
+	for key, definition := range x.Strings {
+		if definition.ExtractionState == "stale" {
+			continue
+		}
+		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
+			continue
+		}
+		localization, exists := definition.Localizations[language]
+		if !exists {
+			details = append(details, UntranslatedDetail{Key: key, Language: language, Path: "missing"})
+			continue
+		}
+		details = append(details, localization.untranslatedPaths(key, language)...)
+	}
+	return details
+}
+
+// UntranslatedDetailsForAllLanguages returns detailed paths for all untranslated
+// leaf string units across all languages and keys.
+func (x *XCStrings) UntranslatedDetailsForAllLanguages() []UntranslatedDetail {
+	var details []UntranslatedDetail
+	languages := x.Languages()
+	for key, definition := range x.Strings {
+		if definition.ExtractionState == "stale" {
+			continue
+		}
+		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
+			continue
+		}
+		for _, lang := range languages {
+			localization, exists := definition.Localizations[lang]
+			if !exists {
+				details = append(details, UntranslatedDetail{Key: key, Language: lang, Path: "missing"})
+				continue
+			}
+			details = append(details, localization.untranslatedPaths(key, lang)...)
+		}
+	}
+	return details
+}
+
+// untranslatedPaths collects paths of untranslated leaf string units.
+func (l *Localization) untranslatedPaths(key, language string) []UntranslatedDetail {
+	var details []UntranslatedDetail
+	if l.StringUnit != nil {
+		if l.StringUnit.State != "translated" {
+			details = append(details, UntranslatedDetail{Key: key, Language: language, Path: l.StringUnit.State})
+		}
+	}
+	if l.Variations != nil {
+		details = append(details, l.Variations.untranslatedPaths(key, language, "")...)
+	}
+	for name, sub := range l.Substitutions {
+		details = append(details, sub.Variations.untranslatedPaths(key, language, "substitutions."+name)...)
+	}
+	return details
+}
+
+// untranslatedPaths recursively collects paths of untranslated leaf string units.
+func (v *Variations) untranslatedPaths(key, language, prefix string) []UntranslatedDetail {
+	var details []UntranslatedDetail
+	join := func(a, b string) string {
+		if a == "" {
+			return b
+		}
+		return a + "." + b
+	}
+	for cat, vv := range v.Plural {
+		if vv == nil {
+			continue
+		}
+		path := join(prefix, "plural."+cat)
+		if vv.StringUnit != nil && vv.StringUnit.State != "translated" {
+			details = append(details, UntranslatedDetail{Key: key, Language: language, Path: path})
+		}
+		if vv.Variations != nil {
+			details = append(details, vv.Variations.untranslatedPaths(key, language, path)...)
+		}
+	}
+	for dev, vv := range v.Device {
+		if vv == nil {
+			continue
+		}
+		path := join(prefix, "device."+dev)
+		if vv.StringUnit != nil && vv.StringUnit.State != "translated" {
+			details = append(details, UntranslatedDetail{Key: key, Language: language, Path: path})
+		}
+		if vv.Variations != nil {
+			details = append(details, vv.Variations.untranslatedPaths(key, language, path)...)
+		}
+	}
+	return details
+}
+
 // FilterKeysByPrefix returns keys that start with the given prefix.
 func (x *XCStrings) FilterKeysByPrefix(keys []string, prefix string) []string {
 	if prefix == "" {
