@@ -1,6 +1,7 @@
 package xcstrings
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -100,25 +101,25 @@ func TestXCStrings_GetUntranslatedKeys(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"translated_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Hello"}},
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "こんにちは"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "こんにちは"}},
 				},
 			},
 			"untranslated_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Untranslated"}},
-					"ja": {StringUnit: StringUnit{State: "new", Value: "未翻訳"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Untranslated"}},
+					"ja": {StringUnit: &StringUnit{State: "new", Value: "未翻訳"}},
 				},
 			},
 			"missing_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Missing"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Missing"}},
 				},
 			},
 			"should_not_translate": {
 				ShouldTranslate: func() *bool { b := false; return &b }(),
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Don't translate"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Don't translate"}},
 				},
 			},
 		},
@@ -162,43 +163,43 @@ func TestXCStrings_GetKeysWithAnyUntranslated(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"all_translated": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Hello"}},
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "こんにちは"}},
-					"es": {StringUnit: StringUnit{State: "translated", Value: "Hola"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "こんにちは"}},
+					"es": {StringUnit: &StringUnit{State: "translated", Value: "Hola"}},
 				},
 			},
 			"ja_untranslated": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "English"}},
-					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
-					"es": {StringUnit: StringUnit{State: "translated", Value: "Español"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "English"}},
+					"ja": {StringUnit: &StringUnit{State: "new", Value: ""}},
+					"es": {StringUnit: &StringUnit{State: "translated", Value: "Español"}},
 				},
 			},
 			"es_missing": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "English only"}},
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "日本語"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "English only"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "日本語"}},
 					// es is missing - should be considered untranslated
 				},
 			},
 			"only_en_translated": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "English"}},
-					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "English"}},
+					"ja": {StringUnit: &StringUnit{State: "new", Value: ""}},
 					// es is missing
 				},
 			},
 			"all_untranslated": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "new", Value: ""}},
-					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
-					"es": {StringUnit: StringUnit{State: "new", Value: ""}},
+					"en": {StringUnit: &StringUnit{State: "new", Value: ""}},
+					"ja": {StringUnit: &StringUnit{State: "new", Value: ""}},
+					"es": {StringUnit: &StringUnit{State: "new", Value: ""}},
 				},
 			},
 			"should_not_translate": {
 				ShouldTranslate: func() *bool { b := false; return &b }(),
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Don't translate"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Don't translate"}},
 					// ja and es are missing, but this should not appear in untranslated list
 				},
 			},
@@ -221,19 +222,19 @@ func TestXCStrings_ShouldTranslateFlag(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"normal_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Normal"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Normal"}},
 				},
 			},
 			"should_translate_true": {
 				ShouldTranslate: func() *bool { b := true; return &b }(),
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Translate me"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Translate me"}},
 				},
 			},
 			"should_translate_false": {
 				ShouldTranslate: func() *bool { b := false; return &b }(),
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Don't translate"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Don't translate"}},
 				},
 			},
 			"placeholder_key": {
@@ -242,8 +243,8 @@ func TestXCStrings_ShouldTranslateFlag(t *testing.T) {
 			},
 			"already_translated": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Already translated"}},
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "翻訳済み"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Already translated"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "翻訳済み"}},
 				},
 			},
 		},
@@ -274,7 +275,7 @@ func TestXCStrings_SetTranslation(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"existing_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Existing"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Existing"}},
 				},
 			},
 		},
@@ -335,8 +336,8 @@ func TestXCStrings_SetTranslation_PreservesExistingLocalization(t *testing.T) {
 				Comment:         "A greeting message",
 				ExtractionState: "manual",
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Hello"}},
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "こんにちは"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "こんにちは"}},
 				},
 			},
 		},
@@ -426,7 +427,7 @@ func TestXCStrings_SaveToFile(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"test_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Test"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Test"}},
 				},
 			},
 		},
@@ -515,7 +516,7 @@ func TestXCStrings_SaveToFile_AtomicWrite(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Value"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Value"}},
 				},
 			},
 		},
@@ -564,7 +565,7 @@ func TestXCStrings_SaveToFile_OverwriteExisting(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"old_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Old"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Old"}},
 				},
 			},
 		},
@@ -583,7 +584,7 @@ func TestXCStrings_SaveToFile_OverwriteExisting(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"new_key": {
 				Localizations: map[string]Localization{
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "New"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "New"}},
 				},
 			},
 		},
@@ -614,17 +615,17 @@ func TestXCStrings_GetTranslatedKeys(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"translated_key": {
 				Localizations: map[string]Localization{
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "翻訳済み"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "翻訳済み"}},
 				},
 			},
 			"untranslated_key": {
 				Localizations: map[string]Localization{
-					"ja": {StringUnit: StringUnit{State: "new", Value: "未翻訳"}},
+					"ja": {StringUnit: &StringUnit{State: "new", Value: "未翻訳"}},
 				},
 			},
 			"missing_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Missing"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Missing"}},
 				},
 			},
 		},
@@ -636,4 +637,195 @@ func TestXCStrings_GetTranslatedKeys(t *testing.T) {
 	sort.Strings(got)
 	sort.Strings(want)
 	test.AssertSliceEqual(t, got, want)
+}
+
+// normalizeJSON re-marshals JSON to produce a canonical form for comparison.
+func normalizeJSON(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var v interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
+		t.Fatalf("failed to unmarshal JSON for normalization: %v", err)
+	}
+	out, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal JSON for normalization: %v", err)
+	}
+	return out
+}
+
+// assertRoundTrip loads a fixture, saves it, and verifies the output matches.
+func assertRoundTrip(t *testing.T, fixtureName string) {
+	t.Helper()
+
+	fixturePath := test.FixturePath(fixtureName)
+
+	// Read original fixture
+	originalData, err := os.ReadFile(fixturePath)
+	test.AssertNoError(t, err)
+
+	// Load the fixture
+	xcstringsData, err := Load(fixturePath)
+	test.AssertNoError(t, err)
+
+	// Save to a temp file
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, fixtureName)
+	err = xcstringsData.SaveToFile(outputPath)
+	test.AssertNoError(t, err)
+
+	// Read the saved output
+	savedData, err := os.ReadFile(outputPath)
+	test.AssertNoError(t, err)
+
+	// Normalize both and compare
+	normalizedOriginal := normalizeJSON(t, originalData)
+	normalizedSaved := normalizeJSON(t, savedData)
+
+	if string(normalizedOriginal) != string(normalizedSaved) {
+		t.Errorf("round-trip mismatch for %s\noriginal:\n%s\nsaved:\n%s",
+			fixtureName, string(normalizedOriginal), string(normalizedSaved))
+	}
+
+	// Verify the saved file can be loaded again
+	reloaded, err := Load(outputPath)
+	test.AssertNoError(t, err)
+	if reloaded == nil {
+		t.Fatal("reloaded xcstrings should not be nil")
+	}
+}
+
+func TestRoundTrip_PluralVariations(t *testing.T) {
+	assertRoundTrip(t, "plural_variations.xcstrings")
+
+	// Also verify the structure was parsed correctly
+	fixturePath := test.FixturePath("plural_variations.xcstrings")
+	xcstringsData, err := Load(fixturePath)
+	test.AssertNoError(t, err)
+
+	def := xcstringsData.Strings["item_count"]
+	enLoc := def.Localizations["en"]
+
+	if enLoc.StringUnit != nil {
+		t.Error("expected StringUnit to be nil for variation-based localization")
+	}
+	if enLoc.Variations == nil {
+		t.Fatal("expected Variations to be non-nil")
+	}
+	if enLoc.Variations.Plural == nil {
+		t.Fatal("expected Plural variations to be non-nil")
+	}
+	if len(enLoc.Variations.Plural) != 2 {
+		t.Errorf("expected 2 plural categories, got %d", len(enLoc.Variations.Plural))
+	}
+
+	oneVariation := enLoc.Variations.Plural["one"]
+	if oneVariation == nil || oneVariation.StringUnit == nil {
+		t.Fatal("expected 'one' plural variation with stringUnit")
+	}
+	test.AssertEqual(t, oneVariation.StringUnit.Value, "%lld item")
+
+	otherVariation := enLoc.Variations.Plural["other"]
+	if otherVariation == nil || otherVariation.StringUnit == nil {
+		t.Fatal("expected 'other' plural variation with stringUnit")
+	}
+	test.AssertEqual(t, otherVariation.StringUnit.Value, "%lld items")
+}
+
+func TestRoundTrip_DeviceVariations(t *testing.T) {
+	assertRoundTrip(t, "device_variations.xcstrings")
+
+	fixturePath := test.FixturePath("device_variations.xcstrings")
+	xcstringsData, err := Load(fixturePath)
+	test.AssertNoError(t, err)
+
+	def := xcstringsData.Strings["welcome_message"]
+	enLoc := def.Localizations["en"]
+
+	if enLoc.Variations == nil {
+		t.Fatal("expected Variations to be non-nil")
+	}
+	if enLoc.Variations.Device == nil {
+		t.Fatal("expected Device variations to be non-nil")
+	}
+	if len(enLoc.Variations.Device) != 3 {
+		t.Errorf("expected 3 device categories, got %d", len(enLoc.Variations.Device))
+	}
+
+	iphoneVariation := enLoc.Variations.Device["iphone"]
+	if iphoneVariation == nil || iphoneVariation.StringUnit == nil {
+		t.Fatal("expected 'iphone' device variation with stringUnit")
+	}
+	test.AssertEqual(t, iphoneVariation.StringUnit.Value, "Welcome to our iPhone app")
+}
+
+func TestRoundTrip_NestedVariations(t *testing.T) {
+	assertRoundTrip(t, "nested_variations.xcstrings")
+
+	fixturePath := test.FixturePath("nested_variations.xcstrings")
+	xcstringsData, err := Load(fixturePath)
+	test.AssertNoError(t, err)
+
+	def := xcstringsData.Strings["photo_count"]
+	enLoc := def.Localizations["en"]
+
+	if enLoc.Variations == nil || enLoc.Variations.Device == nil {
+		t.Fatal("expected device variations")
+	}
+
+	iphoneVariation := enLoc.Variations.Device["iphone"]
+	if iphoneVariation == nil {
+		t.Fatal("expected 'iphone' device variation")
+	}
+	if iphoneVariation.StringUnit != nil {
+		t.Error("expected StringUnit to be nil for nested variation")
+	}
+	if iphoneVariation.Variations == nil || iphoneVariation.Variations.Plural == nil {
+		t.Fatal("expected nested plural variations under iphone")
+	}
+
+	oneVariation := iphoneVariation.Variations.Plural["one"]
+	if oneVariation == nil || oneVariation.StringUnit == nil {
+		t.Fatal("expected 'one' plural variation under iphone")
+	}
+	test.AssertEqual(t, oneVariation.StringUnit.Value, "%lld photo on your iPhone")
+}
+
+func TestRoundTrip_Substitutions(t *testing.T) {
+	assertRoundTrip(t, "substitutions.xcstrings")
+
+	fixturePath := test.FixturePath("substitutions.xcstrings")
+	xcstringsData, err := Load(fixturePath)
+	test.AssertNoError(t, err)
+
+	def := xcstringsData.Strings["upload_progress"]
+	enLoc := def.Localizations["en"]
+
+	if enLoc.StringUnit == nil {
+		t.Fatal("expected StringUnit to be non-nil for substitution-based localization")
+	}
+	test.AssertEqual(t, enLoc.StringUnit.Value, "Uploading %#@file_count@ to %#@folder@")
+
+	if enLoc.Substitutions == nil {
+		t.Fatal("expected Substitutions to be non-nil")
+	}
+	if len(enLoc.Substitutions) != 2 {
+		t.Errorf("expected 2 substitutions, got %d", len(enLoc.Substitutions))
+	}
+
+	fileCount := enLoc.Substitutions["file_count"]
+	test.AssertEqual(t, fileCount.ArgNum, 1)
+	test.AssertEqual(t, fileCount.FormatSpecifier, "lld")
+	if fileCount.Variations.Plural == nil {
+		t.Fatal("expected plural variations in file_count substitution")
+	}
+
+	oneVariation := fileCount.Variations.Plural["one"]
+	if oneVariation == nil || oneVariation.StringUnit == nil {
+		t.Fatal("expected 'one' variation in file_count substitution")
+	}
+	test.AssertEqual(t, oneVariation.StringUnit.Value, "%arg file")
+}
+
+func TestRoundTrip_SimpleStringUnit(t *testing.T) {
+	assertRoundTrip(t, "simple.xcstrings")
 }

@@ -26,13 +26,38 @@ type StringDefinition struct {
 
 // Localization represents localization data for a specific language.
 type Localization struct {
-	StringUnit StringUnit `json:"stringUnit"`
+	StringUnit    *StringUnit              `json:"stringUnit,omitempty"`
+	Variations    *Variations              `json:"variations,omitempty"`
+	Substitutions map[string]Substitution  `json:"substitutions,omitempty"`
 }
 
 // StringUnit represents a string unit with translation state and value.
 type StringUnit struct {
 	State string `json:"state"`
 	Value string `json:"value"`
+}
+
+// PluralCategory represents a CLDR plural category.
+type PluralCategory = string
+
+// VariationValue is the recursive building block.
+// It holds either a direct stringUnit or nested variations (not both).
+type VariationValue struct {
+	StringUnit *StringUnit `json:"stringUnit,omitempty"`
+	Variations *Variations `json:"variations,omitempty"`
+}
+
+// Variations holds plural and/or device variation maps.
+type Variations struct {
+	Plural map[PluralCategory]*VariationValue `json:"plural,omitempty"`
+	Device map[string]*VariationValue          `json:"device,omitempty"`
+}
+
+// Substitution represents a single substitution entry.
+type Substitution struct {
+	ArgNum          int        `json:"argNum"`
+	FormatSpecifier string     `json:"formatSpecifier"`
+	Variations      Variations `json:"variations"`
 }
 
 // Load reads and parses an XCStrings file from the given path.
@@ -116,7 +141,7 @@ func (x *XCStrings) UntranslatedKeys(language string) []string {
 			continue
 		}
 		localization, exists := definition.Localizations[language]
-		if !exists || localization.StringUnit.State != "translated" {
+		if !exists || localization.StringUnit == nil || localization.StringUnit.State != "translated" {
 			untranslated = append(untranslated, key)
 		}
 	}
@@ -153,7 +178,7 @@ func (x *XCStrings) SetTranslation(key, language, value string) error {
 	}
 
 	loc := definition.Localizations[language]
-	loc.StringUnit = StringUnit{
+	loc.StringUnit = &StringUnit{
 		State: "translated",
 		Value: value,
 	}
@@ -175,7 +200,7 @@ func (x *XCStrings) KeysWithAnyUntranslated() []string {
 		hasUntranslated := false
 		for _, lang := range languages {
 			localization, exists := definition.Localizations[lang]
-			if !exists || localization.StringUnit.State != "translated" {
+			if !exists || localization.StringUnit == nil || localization.StringUnit.State != "translated" {
 				hasUntranslated = true
 				break
 			}
@@ -193,7 +218,7 @@ func (x *XCStrings) TranslatedKeys(language string) []string {
 	var translated []string
 	for key, definition := range x.Strings {
 		if localization, exists := definition.Localizations[language]; exists {
-			if localization.StringUnit.State == "translated" {
+			if localization.StringUnit != nil && localization.StringUnit.State == "translated" {
 				translated = append(translated, key)
 			}
 		}
