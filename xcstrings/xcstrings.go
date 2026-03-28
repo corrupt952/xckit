@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"xckit/helper/atomicwrite"
 )
 
 // XCStrings represents the structure of an Xcode String Catalog file.
@@ -137,36 +138,7 @@ func (x *XCStrings) SaveToFile(path string) error {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".xcstrings-*.tmp")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer func() {
-		// Clean up temp file on error; after successful rename this is a no-op.
-		os.Remove(tmpPath)
-	}()
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return fmt.Errorf("failed to sync temp file: %w", err)
-	}
-
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("failed to rename temp file: %w", err)
-	}
-
-	return nil
+	return atomicwrite.WriteFile(path, data, 0644)
 }
 
 // Keys returns all string keys in the catalog.

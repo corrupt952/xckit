@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/subcommands"
+	"xckit/helper/atomicwrite"
 	"xckit/xcstrings"
 )
 
@@ -97,7 +98,7 @@ func (c *ImportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 				fmt.Fprintf(flag.CommandLine.Output(), "Error creating backup: %v\n", err)
 				return subcommands.ExitFailure
 			}
-			if err := os.WriteFile(xcPath+".bak", data, 0644); err != nil {
+			if err := atomicwrite.WriteFile(xcPath+".bak", data, 0644); err != nil {
 				fmt.Fprintf(flag.CommandLine.Output(), "Error creating backup: %v\n", err)
 				return subcommands.ExitFailure
 			}
