@@ -354,11 +354,21 @@ func TestImportCommand_Execute_Backup(t *testing.T) {
 		t.Errorf("expected 1 updated, got: %q", output)
 	}
 
-	// Verify backup file exists
+	// Verify backup file exists with correct content
 	bakPath := xcPath + ".bak"
-	if _, err := os.Stat(bakPath); os.IsNotExist(err) {
-		t.Error("backup file should exist")
+	bakData, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf("backup file should exist: %v", err)
 	}
+	if string(bakData) != xcContent {
+		t.Errorf("backup content mismatch:\nwant: %s\ngot:  %s", xcContent, string(bakData))
+	}
+
+	// Verify the original file was updated (not identical to backup)
+	xc, err := xcstrings.Load(xcPath)
+	test.AssertNoError(t, err)
+	loc := xc.Strings["greeting"].Localizations["ja"]
+	test.AssertEqual(t, loc.StringUnit.Value, "こんにちは")
 }
 
 func TestImportCommand_Execute_OnMissingKeyError(t *testing.T) {
