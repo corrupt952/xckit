@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"flag"
+	"os"
 	"strings"
 	"testing"
 
@@ -156,6 +157,61 @@ func TestStaleCommand_Execute_Remove(t *testing.T) {
 	}
 
 	// Verify file was modified
+	loaded, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	if len(loaded.Strings) != 1 {
+		t.Errorf("expected 1 key after removal, got %d", len(loaded.Strings))
+	}
+	if _, exists := loaded.Strings["old_key"]; exists {
+		t.Error("old_key should have been removed")
+	}
+}
+
+func TestStaleCommand_Execute_RemoveWithoutFlag(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"active": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Active"}}
+				}
+			},
+			"old_key": {
+				"extractionState": "stale",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Old"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	tmpDir := t.TempDir()
+	filePath := tmpDir + "/Localizable.xcstrings"
+	if err := os.WriteFile(filePath, []byte(testContent), 0644); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	origDir, err := os.Getwd()
+	test.AssertNoError(t, err)
+	t.Cleanup(func() { os.Chdir(origDir) })
+	os.Chdir(tmpDir)
+
+	cmd := &StaleCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err = flagSet.Parse([]string{"--remove"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	if !strings.Contains(output, "Removed 1 stale key(s)") {
+		t.Errorf("output should contain removal message, got: %q", output)
+	}
+
 	loaded, err := xcstrings.Load(filePath)
 	test.AssertNoError(t, err)
 	if len(loaded.Strings) != 1 {
