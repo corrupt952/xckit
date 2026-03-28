@@ -481,6 +481,32 @@ func TestDisplayKeyDetails_DevicePluralCoexisting(t *testing.T) {
 	}
 }
 
+func TestDisplayKeyDetails_EmptyLocalization(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"empty_loc": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {}, // exists but has nil StringUnit and nil Variations
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"empty_loc"})
+	})
+
+	// The localization entry exists but is empty — should show "(no content)", not "missing"
+	if !strings.Contains(output, "ja: (no content)") {
+		t.Errorf("expected output to contain %q, got:\n%s", "ja: (no content)", output)
+	}
+	if strings.Contains(output, "ja: missing") {
+		t.Errorf("output should not contain %q for an existing but empty localization, got:\n%s", "ja: missing", output)
+	}
+}
+
 func TestDisplayKeyDetails_SubstitutionsFromFixture(t *testing.T) {
 	xc, err := xcstrings.Load("../fixtures/substitutions.xcstrings")
 	if err != nil {
