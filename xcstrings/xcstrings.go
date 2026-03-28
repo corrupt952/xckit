@@ -287,6 +287,8 @@ func (x *XCStrings) SetTranslation(key, language, value string) error {
 		State: "translated",
 		Value: value,
 	}
+	loc.Variations = nil
+	loc.Substitutions = nil
 	definition.Localizations[language] = loc
 
 	x.Strings[key] = definition
