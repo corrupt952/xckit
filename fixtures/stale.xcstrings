@@ -1,0 +1,32 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "active_key": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Active"}},
+        "ja": {"stringUnit": {"state": "translated", "value": "アクティブ"}}
+      }
+    },
+    "stale_key": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Stale"}},
+        "ja": {"stringUnit": {"state": "translated", "value": "古い"}}
+      }
+    },
+    "another_stale_key": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Another Stale"}},
+        "ja": {"stringUnit": {"state": "new", "value": ""}}
+      }
+    },
+    "untranslated_key": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Untranslated"}},
+        "ja": {"stringUnit": {"state": "new", "value": ""}}
+      }
+    }
+  },
+  "version": "1.0"
+}

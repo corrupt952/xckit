@@ -12,7 +12,11 @@ func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
 	sort.Strings(languages)
 
 	for _, key := range keys {
-		fmt.Printf("\n%s:\n", key)
+		if x.IsStale(key) {
+			fmt.Printf("\n%s [stale]:\n", key)
+		} else {
+			fmt.Printf("\n%s:\n", key)
+		}
 		definition := x.Strings[key]
 		for _, lang := range languages {
 			if localization, exists := definition.Localizations[lang]; exists {

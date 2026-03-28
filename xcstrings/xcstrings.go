@@ -108,10 +108,57 @@ func (x *XCStrings) Keys() []string {
 	return keys
 }
 
+// StaleKeys returns keys that have extractionState "stale".
+func (x *XCStrings) StaleKeys() []string {
+	var keys []string
+	for key, def := range x.Strings {
+		if def.ExtractionState == "stale" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+// ActiveKeys returns keys that are not stale (extractionState != "stale").
+func (x *XCStrings) ActiveKeys() []string {
+	var keys []string
+	for key, def := range x.Strings {
+		if def.ExtractionState != "stale" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+// IsStale returns whether the given key has extractionState "stale".
+func (x *XCStrings) IsStale(key string) bool {
+	def, exists := x.Strings[key]
+	if !exists {
+		return false
+	}
+	return def.ExtractionState == "stale"
+}
+
+// RemoveStaleKeys removes all keys with extractionState "stale" from the catalog.
+func (x *XCStrings) RemoveStaleKeys() int {
+	count := 0
+	for key, def := range x.Strings {
+		if def.ExtractionState == "stale" {
+			delete(x.Strings, key)
+			count++
+		}
+	}
+	return count
+}
+
 // UntranslatedKeys returns keys that are not translated for the given language.
+// Stale keys are excluded.
 func (x *XCStrings) UntranslatedKeys(language string) []string {
 	var untranslated []string
 	for key, definition := range x.Strings {
+		if definition.ExtractionState == "stale" {
+			continue
+		}
 		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
 			continue
 		}
@@ -164,11 +211,15 @@ func (x *XCStrings) SetTranslation(key, language, value string) error {
 }
 
 // KeysWithAnyUntranslated returns keys that have at least one untranslated language.
+// Stale keys are excluded.
 func (x *XCStrings) KeysWithAnyUntranslated() []string {
 	var result []string
 	languages := x.Languages()
 
 	for key, definition := range x.Strings {
+		if definition.ExtractionState == "stale" {
+			continue
+		}
 		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
 			continue
 		}
