@@ -361,6 +361,123 @@ func TestXCStrings_SetTranslation_PreservesExistingLocalization(t *testing.T) {
 	test.AssertEqual(t, def.ExtractionState, "manual")
 }
 
+func TestXCStrings_SetTranslation_ClearsVariations(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"items_count": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"one": {StringUnit: &StringUnit{State: "translated", Value: "%lld アイテム"}},
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld アイテム"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := xcstrings.SetTranslation("items_count", "ja", "アイテム")
+	test.AssertNoError(t, err)
+
+	loc := xcstrings.Strings["items_count"].Localizations["ja"]
+	if loc.StringUnit == nil {
+		t.Fatal("expected StringUnit to be set")
+	}
+	test.AssertEqual(t, loc.StringUnit.State, "translated")
+	test.AssertEqual(t, loc.StringUnit.Value, "アイテム")
+	if loc.Variations != nil {
+		t.Error("expected Variations to be nil after SetTranslation")
+	}
+}
+
+func TestXCStrings_SetTranslation_ClearsSubstitutions(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"file_count": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Substitutions: map[string]Substitution{
+							"files": {
+								ArgNum:          1,
+								FormatSpecifier: "lld",
+								Variations: Variations{
+									Plural: map[PluralCategory]*VariationValue{
+										"one":   {StringUnit: &StringUnit{State: "translated", Value: "%arg ファイル"}},
+										"other": {StringUnit: &StringUnit{State: "translated", Value: "%arg ファイル"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := xcstrings.SetTranslation("file_count", "ja", "ファイル")
+	test.AssertNoError(t, err)
+
+	loc := xcstrings.Strings["file_count"].Localizations["ja"]
+	if loc.StringUnit == nil {
+		t.Fatal("expected StringUnit to be set")
+	}
+	test.AssertEqual(t, loc.StringUnit.State, "translated")
+	test.AssertEqual(t, loc.StringUnit.Value, "ファイル")
+	if loc.Substitutions != nil {
+		t.Error("expected Substitutions to be nil after SetTranslation")
+	}
+}
+
+func TestXCStrings_SetTranslation_ClearsVariations_RoundTrip(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"items_count": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"one":   {StringUnit: &StringUnit{State: "translated", Value: "%lld アイテム"}},
+								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld アイテム"}},
+							},
+						},
+					},
+				},
+			},
+		},
+		Version: "1.0",
+	}
+
+	err := xcstrings.SetTranslation("items_count", "ja", "アイテム")
+	test.AssertNoError(t, err)
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test.xcstrings")
+	err = xcstrings.SaveToFile(path)
+	test.AssertNoError(t, err)
+
+	loaded, err := Load(path)
+	test.AssertNoError(t, err)
+
+	loc := loaded.Strings["items_count"].Localizations["ja"]
+	if loc.StringUnit == nil {
+		t.Fatal("expected StringUnit to be set after round-trip")
+	}
+	test.AssertEqual(t, loc.StringUnit.State, "translated")
+	test.AssertEqual(t, loc.StringUnit.Value, "アイテム")
+	if loc.Variations != nil {
+		t.Error("expected Variations to be nil after round-trip")
+	}
+	if loc.Substitutions != nil {
+		t.Error("expected Substitutions to be nil after round-trip")
+	}
+}
+
 func TestFilterKeysByPrefix(t *testing.T) {
 	xcstrings := &XCStrings{}
 
