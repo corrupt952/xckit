@@ -37,6 +37,8 @@ func (c *StatusCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 	}
 
 	totalKeys := len(xcstrings.Strings)
+	staleKeys := len(xcstrings.StaleKeys())
+	activeKeys := totalKeys - staleKeys
 	languages := xcstrings.Languages()
 	sort.Strings(languages)
 
@@ -44,6 +46,8 @@ func (c *StatusCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 	fmt.Printf("==================\n")
 	fmt.Printf("Source Language: %s\n", xcstrings.SourceLanguage)
 	fmt.Printf("Total Keys: %d\n", totalKeys)
+	fmt.Printf("Stale Keys: %d\n", staleKeys)
+	fmt.Printf("Active Keys: %d\n", activeKeys)
 	fmt.Printf("Languages: %s\n\n", languages)
 
 	fmt.Printf("Progress by Language:\n")
@@ -51,10 +55,13 @@ func (c *StatusCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 
 	for _, lang := range languages {
 		untranslated := xcstrings.UntranslatedKeys(lang)
-		translated := totalKeys - len(untranslated)
-		percentage := float64(translated) / float64(totalKeys) * 100
+		translated := activeKeys - len(untranslated)
+		var percentage float64
+		if activeKeys > 0 {
+			percentage = float64(translated) / float64(activeKeys) * 100
+		}
 
-		fmt.Printf("%-6s: %3d/%d translated (%.1f%%)\n", lang, translated, totalKeys, percentage)
+		fmt.Printf("%-6s: %3d/%d translated (%.1f%%)\n", lang, translated, activeKeys, percentage)
 	}
 
 	return subcommands.ExitSuccess

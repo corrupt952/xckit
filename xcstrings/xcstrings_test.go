@@ -608,6 +608,137 @@ func TestXCStrings_SaveToFile_OverwriteExisting(t *testing.T) {
 	}
 }
 
+func TestXCStrings_StaleKeys(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"active_key": {
+				ExtractionState: "manual",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Active"}},
+				},
+			},
+			"stale_key": {
+				ExtractionState: "stale",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Stale"}},
+				},
+			},
+			"another_stale": {
+				ExtractionState: "stale",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Another Stale"}},
+				},
+			},
+			"no_state_key": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "No State"}},
+				},
+			},
+		},
+	}
+
+	got := xcstrings.StaleKeys()
+	sort.Strings(got)
+	want := []string{"another_stale", "stale_key"}
+	test.AssertSliceEqual(t, got, want)
+}
+
+func TestXCStrings_ActiveKeys(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"active_key": {
+				ExtractionState: "manual",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Active"}},
+				},
+			},
+			"stale_key": {
+				ExtractionState: "stale",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Stale"}},
+				},
+			},
+			"no_state_key": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "No State"}},
+				},
+			},
+		},
+	}
+
+	got := xcstrings.ActiveKeys()
+	sort.Strings(got)
+	want := []string{"active_key", "no_state_key"}
+	test.AssertSliceEqual(t, got, want)
+}
+
+func TestXCStrings_UntranslatedKeys_ExcludesStale(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"active_untranslated": {
+				ExtractionState: "manual",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Active"}},
+				},
+			},
+			"stale_untranslated": {
+				ExtractionState: "stale",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Stale"}},
+				},
+			},
+			"active_translated": {
+				ExtractionState: "manual",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Active"}},
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "翻訳済み"}},
+				},
+			},
+		},
+	}
+
+	got := xcstrings.UntranslatedKeys("ja")
+	sort.Strings(got)
+	want := []string{"active_untranslated"}
+	test.AssertSliceEqual(t, got, want)
+}
+
+func TestXCStrings_KeysWithAnyUntranslated_ExcludesStale(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"active_untranslated": {
+				ExtractionState: "manual",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Active"}},
+					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
+				},
+			},
+			"stale_untranslated": {
+				ExtractionState: "stale",
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Stale"}},
+					"ja": {StringUnit: StringUnit{State: "new", Value: ""}},
+				},
+			},
+			"active_translated": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: StringUnit{State: "translated", Value: "Active"}},
+					"ja": {StringUnit: StringUnit{State: "translated", Value: "翻訳済み"}},
+				},
+			},
+		},
+	}
+
+	got := xcstrings.KeysWithAnyUntranslated()
+	sort.Strings(got)
+	want := []string{"active_untranslated"}
+	test.AssertSliceEqual(t, got, want)
+}
+
 func TestXCStrings_GetTranslatedKeys(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",

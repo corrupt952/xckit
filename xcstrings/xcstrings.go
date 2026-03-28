@@ -109,9 +109,13 @@ func (x *XCStrings) Keys() []string {
 }
 
 // UntranslatedKeys returns keys that are not translated for the given language.
+// Stale keys are excluded from the result.
 func (x *XCStrings) UntranslatedKeys(language string) []string {
 	var untranslated []string
 	for key, definition := range x.Strings {
+		if definition.ExtractionState == "stale" {
+			continue
+		}
 		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
 			continue
 		}
@@ -164,11 +168,15 @@ func (x *XCStrings) SetTranslation(key, language, value string) error {
 }
 
 // KeysWithAnyUntranslated returns keys that have at least one untranslated language.
+// Stale keys are excluded from the result.
 func (x *XCStrings) KeysWithAnyUntranslated() []string {
 	var result []string
 	languages := x.Languages()
 
 	for key, definition := range x.Strings {
+		if definition.ExtractionState == "stale" {
+			continue
+		}
 		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
 			continue
 		}
@@ -186,6 +194,28 @@ func (x *XCStrings) KeysWithAnyUntranslated() []string {
 	}
 
 	return result
+}
+
+// StaleKeys returns keys that have extractionState "stale".
+func (x *XCStrings) StaleKeys() []string {
+	var keys []string
+	for key, def := range x.Strings {
+		if def.ExtractionState == "stale" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+// ActiveKeys returns keys that do not have extractionState "stale".
+func (x *XCStrings) ActiveKeys() []string {
+	var keys []string
+	for key, def := range x.Strings {
+		if def.ExtractionState != "stale" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
 }
 
 // TranslatedKeys returns keys that are translated for the given language.

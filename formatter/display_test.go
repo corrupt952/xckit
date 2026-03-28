@@ -165,6 +165,44 @@ func TestDisplayKeyDetails_OutputFormat(t *testing.T) {
 	}
 }
 
+func TestDisplayKeyDetails_StaleMarker(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"stale_key": {
+				ExtractionState: "stale",
+				Localizations: map[string]xcstrings.Localization{
+					"en": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "Stale"}},
+					"ja": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "古い"}},
+				},
+			},
+			"active_key": {
+				ExtractionState: "manual",
+				Localizations: map[string]xcstrings.Localization{
+					"en": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "Active"}},
+					"ja": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "アクティブ"}},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"stale_key", "active_key"})
+	})
+
+	if !strings.Contains(output, "stale_key [stale]:") {
+		t.Errorf("output should contain 'stale_key [stale]:', got:\n%s", output)
+	}
+
+	// active_key should NOT have [stale] marker
+	if strings.Contains(output, "active_key [stale]") {
+		t.Errorf("output should not contain 'active_key [stale]', got:\n%s", output)
+	}
+	if !strings.Contains(output, "active_key:") {
+		t.Errorf("output should contain 'active_key:', got:\n%s", output)
+	}
+}
+
 func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 	xcstringsData := &xcstrings.XCStrings{
 		SourceLanguage: "en",
