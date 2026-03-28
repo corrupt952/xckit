@@ -34,20 +34,20 @@ func TestDisplayKeyDetails(t *testing.T) {
 				Comment:         "A greeting",
 				ExtractionState: "manual",
 				Localizations: map[string]xcstrings.Localization{
-					"en": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "Hello"}},
-					"ja": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "こんにちは"}},
-					"es": {StringUnit: xcstrings.StringUnit{State: "new", Value: "Hola"}},
+					"en": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "こんにちは"}},
+					"es": {StringUnit: &xcstrings.StringUnit{State: "new", Value: "Hola"}},
 				},
 			},
 			"goodbye": {
 				Localizations: map[string]xcstrings.Localization{
-					"en": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "Goodbye"}},
-					"ja": {StringUnit: xcstrings.StringUnit{State: "translated", Value: ""}}, // Empty value
+					"en": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Goodbye"}},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: ""}}, // Empty value
 				},
 			},
 			"missing_translations": {
 				Localizations: map[string]xcstrings.Localization{
-					"en": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "Missing"}},
+					"en": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Missing"}},
 					// ja is missing
 				},
 			},
@@ -129,8 +129,8 @@ func TestDisplayKeyDetails_OutputFormat(t *testing.T) {
 		Strings: map[string]xcstrings.StringDefinition{
 			"test_key": {
 				Localizations: map[string]xcstrings.Localization{
-					"en": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "Test"}},
-					"ja": {StringUnit: xcstrings.StringUnit{State: "new", Value: "テスト"}},
+					"en": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Test"}},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "new", Value: "テスト"}},
 				},
 			},
 		},
@@ -171,10 +171,10 @@ func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 		Strings: map[string]xcstrings.StringDefinition{
 			"sort_test": {
 				Localizations: map[string]xcstrings.Localization{
-					"zh": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "中文"}},
-					"en": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "English"}},
-					"ja": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "日本語"}},
-					"es": {StringUnit: xcstrings.StringUnit{State: "translated", Value: "Español"}},
+					"zh": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "中文"}},
+					"en": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "English"}},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "日本語"}},
+					"es": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Español"}},
 				},
 			},
 		},
