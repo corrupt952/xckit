@@ -293,6 +293,88 @@ func (x *XCStrings) SetTranslation(key, language, value string) error {
 	return nil
 }
 
+// VariationOptions specifies which variation path to set a translation on.
+type VariationOptions struct {
+	Plural string // CLDR plural category: zero, one, two, few, many, other
+	Device string // Apple device: iphone, ipad, mac, appletv, applewatch, applevision, other
+}
+
+// ValidPluralCategories contains the allowed CLDR plural categories.
+var ValidPluralCategories = []string{"zero", "one", "two", "few", "many", "other"}
+
+// ValidDeviceCategories contains the allowed Apple device identifiers.
+var ValidDeviceCategories = []string{"iphone", "ipad", "mac", "appletv", "applewatch", "applevision", "other"}
+
+// SetVariationTranslation sets a translation within a variation structure.
+// It returns (migrated bool, err error) where migrated indicates that an existing
+// plain stringUnit was converted to a variation structure.
+func (x *XCStrings) SetVariationTranslation(key, language, value string, opts VariationOptions) (bool, error) {
+	definition, exists := x.Strings[key]
+	if !exists {
+		return false, fmt.Errorf("key '%s' not found", key)
+	}
+
+	if definition.Localizations == nil {
+		definition.Localizations = make(map[string]Localization)
+	}
+
+	loc := definition.Localizations[language]
+	migrated := false
+
+	// Check if we need to migrate from plain stringUnit to variations
+	if loc.StringUnit != nil && loc.Variations == nil {
+		migrated = true
+	}
+
+	// Ensure variations structure exists
+	if loc.Variations == nil {
+		loc.Variations = &Variations{}
+	}
+
+	unit := &StringUnit{
+		State: "translated",
+		Value: value,
+	}
+
+	if opts.Plural != "" && opts.Device != "" {
+		// Both plural and device: device is the outer layer, plural is nested inside
+		if loc.Variations.Device == nil {
+			loc.Variations.Device = make(map[string]*VariationValue)
+		}
+		deviceVal := loc.Variations.Device[opts.Device]
+		if deviceVal == nil {
+			deviceVal = &VariationValue{}
+		}
+		if deviceVal.Variations == nil {
+			deviceVal.Variations = &Variations{}
+		}
+		if deviceVal.Variations.Plural == nil {
+			deviceVal.Variations.Plural = make(map[PluralCategory]*VariationValue)
+		}
+		deviceVal.Variations.Plural[opts.Plural] = &VariationValue{StringUnit: unit}
+		loc.Variations.Device[opts.Device] = deviceVal
+	} else if opts.Plural != "" {
+		if loc.Variations.Plural == nil {
+			loc.Variations.Plural = make(map[PluralCategory]*VariationValue)
+		}
+		loc.Variations.Plural[opts.Plural] = &VariationValue{StringUnit: unit}
+	} else if opts.Device != "" {
+		if loc.Variations.Device == nil {
+			loc.Variations.Device = make(map[string]*VariationValue)
+		}
+		loc.Variations.Device[opts.Device] = &VariationValue{StringUnit: unit}
+	}
+
+	// Clear plain stringUnit when migrating to variations
+	if migrated {
+		loc.StringUnit = nil
+	}
+
+	definition.Localizations[language] = loc
+	x.Strings[key] = definition
+	return migrated, nil
+}
+
 // KeysWithAnyUntranslated returns keys that have at least one untranslated language.
 // A language is considered untranslated if any leaf StringUnit (including within
 // variations and substitutions) does not have the "translated" state.
