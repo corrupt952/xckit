@@ -690,27 +690,27 @@ func TestXCStrings_StaleKeys(t *testing.T) {
 		Strings: map[string]StringDefinition{
 			"active_key": {
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Active"}},
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "アクティブ"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Active"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "アクティブ"}},
 				},
 			},
 			"stale_key": {
 				ExtractionState: "stale",
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Stale"}},
-					"ja": {StringUnit: StringUnit{State: "translated", Value: "古い"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Stale"}},
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "古い"}},
 				},
 			},
 			"another_stale": {
 				ExtractionState: "stale",
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Another"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Another"}},
 				},
 			},
 			"manual_key": {
 				ExtractionState: "manual",
 				Localizations: map[string]Localization{
-					"en": {StringUnit: StringUnit{State: "translated", Value: "Manual"}},
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Manual"}},
 				},
 			},
 		},

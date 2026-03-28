@@ -26,12 +26,70 @@ func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
 					if value == "" {
 						value = "(empty)"
 					}
-					fmt.Printf("  %s: %s - %s\n", lang, state, value)
+					fmt.Printf("  %s:\n", lang)
+					fmt.Printf("    %s - %s\n", state, value)
+				} else if localization.Variations != nil {
+					fmt.Printf("  %s:\n", lang)
+					printVariations(localization.Variations, "    ")
 				} else {
-					fmt.Printf("  %s: (variations)\n", lang)
+					fmt.Printf("  %s: missing\n", lang)
+				}
+				if localization.Substitutions != nil {
+					subNames := make([]string, 0, len(localization.Substitutions))
+					for name := range localization.Substitutions {
+						subNames = append(subNames, name)
+					}
+					sort.Strings(subNames)
+					for _, name := range subNames {
+						sub := localization.Substitutions[name]
+						fmt.Printf("    substitutions.%s:\n", name)
+						printVariations(&sub.Variations, "      ")
+					}
 				}
 			} else {
 				fmt.Printf("  %s: missing\n", lang)
+			}
+		}
+	}
+}
+
+// printVariations renders plural and device variations with the given indent prefix.
+func printVariations(v *xcstrings.Variations, indent string) {
+	if v.Plural != nil {
+		categories := make([]string, 0, len(v.Plural))
+		for cat := range v.Plural {
+			categories = append(categories, cat)
+		}
+		sort.Strings(categories)
+		for _, cat := range categories {
+			vv := v.Plural[cat]
+			if vv == nil {
+				continue
+			}
+			if vv.StringUnit != nil {
+				fmt.Printf("%splural.%s: %s - %s\n", indent, cat, vv.StringUnit.State, vv.StringUnit.Value)
+			} else if vv.Variations != nil {
+				fmt.Printf("%splural.%s:\n", indent, cat)
+				printVariations(vv.Variations, indent+"  ")
+			}
+		}
+	}
+	if v.Device != nil {
+		devices := make([]string, 0, len(v.Device))
+		for dev := range v.Device {
+			devices = append(devices, dev)
+		}
+		sort.Strings(devices)
+		for _, dev := range devices {
+			vv := v.Device[dev]
+			if vv == nil {
+				continue
+			}
+			if vv.StringUnit != nil {
+				fmt.Printf("%sdevice.%s: %s - %s\n", indent, dev, vv.StringUnit.State, vv.StringUnit.Value)
+			} else if vv.Variations != nil {
+				fmt.Printf("%sdevice.%s:\n", indent, dev)
+				printVariations(vv.Variations, indent+"  ")
 			}
 		}
 	}
