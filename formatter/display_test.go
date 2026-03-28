@@ -439,6 +439,48 @@ func TestDisplayKeyDetails_Variations(t *testing.T) {
 	}
 }
 
+func TestDisplayKeyDetails_DevicePluralCoexisting(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"mixed_variations": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {
+						Variations: &xcstrings.Variations{
+							Device: map[string]*xcstrings.VariationValue{
+								"iphone": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "iPhone version"}},
+								"ipad":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "iPad version"}},
+							},
+							Plural: map[string]*xcstrings.VariationValue{
+								"one":   {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "One item"}},
+								"other": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Many items"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"mixed_variations"})
+	})
+
+	expectedPatterns := []string{
+		"mixed_variations:",
+		"device.ipad: translated - iPad version",
+		"device.iphone: translated - iPhone version",
+		"plural.one: translated - One item",
+		"plural.other: translated - Many items",
+	}
+
+	for _, expected := range expectedPatterns {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+		}
+	}
+}
+
 func TestDisplayKeyDetails_SubstitutionsFromFixture(t *testing.T) {
 	xc, err := xcstrings.Load("../fixtures/substitutions.xcstrings")
 	if err != nil {
