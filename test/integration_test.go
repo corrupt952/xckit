@@ -71,7 +71,7 @@ func TestIntegration_Help(t *testing.T) {
 	test.AssertEqual(t, stderr, "")
 
 	// Should contain subcommands
-	expectedCommands := []string{"list", "untranslated", "set", "status", "version"}
+	expectedCommands := []string{"export", "import", "list", "untranslated", "set", "stale", "status", "version"}
 	for _, cmd := range expectedCommands {
 		if !strings.Contains(stdout, cmd) {
 			t.Errorf("help output should contain %q, got: %q", cmd, stdout)
