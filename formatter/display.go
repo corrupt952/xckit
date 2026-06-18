@@ -19,10 +19,14 @@ func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
 		}
 		definition := x.Strings[key]
 
-		// Build the full list of languages to display: non-source languages
-		// from the catalog plus any language in this key's localizations that
-		// has variations (which may include the source language).
+		// Build the full list of languages to display: the source language
+		// (the canonical reference value) plus all non-source languages from
+		// the catalog, plus any language in this key's localizations that has
+		// variations.
 		langSet := make(map[string]bool)
+		if x.SourceLanguage != "" {
+			langSet[x.SourceLanguage] = true
+		}
 		for _, l := range languages {
 			langSet[l] = true
 		}
