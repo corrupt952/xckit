@@ -316,7 +316,7 @@ func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 		DisplayKeyDetails(xcstringsData, []string{"sort_test"})
 	})
 
-	// Languages should appear in alphabetical order: es, ja, zh (en excluded as source language)
+	// Languages should appear in alphabetical order: en, es, ja, zh (source language included)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
 	var languageOrder []string
@@ -329,7 +329,7 @@ func TestDisplayKeyDetails_LanguageSorting(t *testing.T) {
 		}
 	}
 
-	expectedOrder := []string{"es", "ja", "zh"} // en is excluded as source language
+	expectedOrder := []string{"en", "es", "ja", "zh"} // source language included
 	if len(languageOrder) != len(expectedOrder) {
 		t.Errorf("expected %d languages, got %d", len(expectedOrder), len(languageOrder))
 		return
@@ -534,6 +534,37 @@ func TestDisplayKeyDetails_SubstitutionsFromFixture(t *testing.T) {
 			if !strings.Contains(output, pattern) {
 				t.Errorf("expected output to contain %q, got:\n%s", pattern, output)
 			}
+		}
+	}
+}
+
+func TestDisplayKeyDetails_IncludesSourceLanguage(t *testing.T) {
+	xcstringsData := &xcstrings.XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]xcstrings.StringDefinition{
+			"some.key.prefix.title": {
+				Localizations: map[string]xcstrings.Localization{
+					"en": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Import Error"}},
+					"de": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "Importfehler"}},
+					"ja": {StringUnit: &xcstrings.StringUnit{State: "translated", Value: "インポートエラー"}},
+				},
+			},
+		},
+	}
+
+	output := captureOutput(func() {
+		DisplayKeyDetails(xcstringsData, []string{"some.key.prefix.title"})
+	})
+
+	expectedPatterns := []string{
+		"some.key.prefix.title:",
+		"en: translated - Import Error",
+		"de: translated - Importfehler",
+		"ja: translated - インポートエラー",
+	}
+	for _, expected := range expectedPatterns {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
 		}
 	}
 }
