@@ -86,10 +86,10 @@ All commands accept `-f` (or `--file`) to specify the `.xcstrings` file path. Wh
 ### list
 
 ```bash
-xckit list [-f file.xcstrings] [--prefix <prefix>]
+xckit list [-f file.xcstrings] [--prefix <prefix>] [--state <state>]
 ```
 
-Lists all keys with their translation status. Use `--prefix` to filter by key prefix.
+Lists all keys with their translation status. Use `--prefix` to filter by key prefix and `--state` to filter by `extractionState` (e.g. `manual`, `stale`, `new`). Each key with a non-empty `extractionState` is annotated in the output (e.g. `mykey [manual]:`). The two filters can be combined.
 
 ### untranslated
 

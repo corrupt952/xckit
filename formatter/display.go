@@ -12,8 +12,8 @@ func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
 	sort.Strings(languages)
 
 	for _, key := range keys {
-		if x.IsStale(key) {
-			fmt.Printf("\n%s [stale]:\n", key)
+		if state := x.ExtractionStateOf(key); state != "" {
+			fmt.Printf("\n%s [%s]:\n", key, state)
 		} else {
 			fmt.Printf("\n%s:\n", key)
 		}

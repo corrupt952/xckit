@@ -63,7 +63,7 @@ func TestDisplayKeyDetails(t *testing.T) {
 			name: "single key with all translations",
 			keys: []string{"hello"},
 			expectedOutput: []string{
-				"hello:",
+				"hello [manual]:",
 				"new - Hola",
 				"translated - こんにちは",
 			},
@@ -88,7 +88,7 @@ func TestDisplayKeyDetails(t *testing.T) {
 			name: "multiple keys",
 			keys: []string{"hello", "goodbye"},
 			expectedOutput: []string{
-				"hello:",
+				"hello [manual]:",
 				"goodbye:",
 				"new - Hola",
 				"translated - こんにちは",

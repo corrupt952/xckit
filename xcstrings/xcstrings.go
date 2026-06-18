@@ -181,6 +181,31 @@ func (x *XCStrings) IsStale(key string) bool {
 	return def.ExtractionState == "stale"
 }
 
+// ExtractionStateOf returns the extractionState of the given key.
+// Keys without an explicit extractionState (the default "translated" case
+// where the field is omitted from JSON) return an empty string.
+// A missing key also returns an empty string.
+func (x *XCStrings) ExtractionStateOf(key string) string {
+	def, exists := x.Strings[key]
+	if !exists {
+		return ""
+	}
+	return def.ExtractionState
+}
+
+// KeysByState returns keys whose extractionState equals the given state.
+// Passing "" matches keys whose extractionState field is absent (the default
+// when Xcode considers the entry translated and does not write the field).
+func (x *XCStrings) KeysByState(state string) []string {
+	var keys []string
+	for key, def := range x.Strings {
+		if def.ExtractionState == state {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
 // RemoveStaleKeys removes all keys with extractionState "stale" from the catalog.
 func (x *XCStrings) RemoveStaleKeys() int {
 	count := 0

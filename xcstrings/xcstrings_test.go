@@ -977,6 +977,27 @@ func TestXCStrings_StaleKeys(t *testing.T) {
 			t.Error("stale key should have been removed")
 		}
 	})
+
+	t.Run("ExtractionStateOf returns the raw state", func(t *testing.T) {
+		test.AssertEqual(t, xcstrings.ExtractionStateOf("stale_key"), "stale")
+		test.AssertEqual(t, xcstrings.ExtractionStateOf("manual_key"), "manual")
+		test.AssertEqual(t, xcstrings.ExtractionStateOf("active_key"), "")
+		test.AssertEqual(t, xcstrings.ExtractionStateOf("nonexistent"), "")
+	})
+
+	t.Run("KeysByState filters by extractionState", func(t *testing.T) {
+		manual := xcstrings.KeysByState("manual")
+		sort.Strings(manual)
+		test.AssertSliceEqual(t, manual, []string{"manual_key"})
+
+		stale := xcstrings.KeysByState("stale")
+		sort.Strings(stale)
+		test.AssertSliceEqual(t, stale, []string{"another_stale", "stale_key"})
+
+		empty := xcstrings.KeysByState("")
+		sort.Strings(empty)
+		test.AssertSliceEqual(t, empty, []string{"active_key"})
+	})
 }
 
 func TestLocalization_AllStringUnits(t *testing.T) {

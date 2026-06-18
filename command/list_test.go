@@ -97,6 +97,99 @@ func TestListCommand_Execute(t *testing.T) {
 	}
 }
 
+func TestListCommand_Execute_StateFilter(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"active.key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Active"}}
+				}
+			},
+			"manual.key": {
+				"extractionState": "manual",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Manual"}}
+				}
+			},
+			"stale.key": {
+				"extractionState": "stale",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Stale"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	tests := []struct {
+		name         string
+		args         []string
+		mustContain  []string
+		mustNotMatch []string
+	}{
+		{
+			name:         "filter manual",
+			args:         []string{"--state", "manual"},
+			mustContain:  []string{"manual.key [manual]:", "Keys with state 'manual':"},
+			mustNotMatch: []string{"active.key", "stale.key"},
+		},
+		{
+			name:         "filter stale",
+			args:         []string{"--state", "stale"},
+			mustContain:  []string{"stale.key [stale]:", "Keys with state 'stale':"},
+			mustNotMatch: []string{"active.key", "manual.key"},
+		},
+		{
+			name:         "filter empty matches default",
+			args:         []string{},
+			mustContain:  []string{"active.key:", "manual.key [manual]:", "stale.key [stale]:"},
+			mustNotMatch: []string{"active.key [", "active.key [manual]"},
+		},
+		{
+			name:         "filter non-matching state",
+			args:         []string{"--state", "new"},
+			mustContain:  []string{"No keys found with state 'new'"},
+			mustNotMatch: []string{"active.key", "manual.key", "stale.key"},
+		},
+		{
+			name:         "prefix and state combined",
+			args:         []string{"--prefix", "manual", "--state", "manual"},
+			mustContain:  []string{"manual.key [manual]:", "Keys with prefix 'manual' and state 'manual':"},
+			mustNotMatch: []string{"active.key", "stale.key"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+			cmd := &ListCommand{}
+			flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+			cmd.SetFlags(flagSet)
+			args := append([]string{"-f", filePath}, tt.args...)
+			err := flagSet.Parse(args)
+			test.AssertNoError(t, err)
+
+			output := captureOutput(func() {
+				status := cmd.Execute(context.Background(), flagSet)
+				test.AssertEqual(t, int(status), 0)
+			})
+
+			for _, want := range tt.mustContain {
+				if !strings.Contains(output, want) {
+					t.Errorf("output should contain %q, got: %q", want, output)
+				}
+			}
+			for _, unwanted := range tt.mustNotMatch {
+				if strings.Contains(output, unwanted) {
+					t.Errorf("output should NOT contain %q, got: %q", unwanted, output)
+				}
+			}
+		})
+	}
+}
+
 func TestListCommand_Execute_PluralVariations(t *testing.T) {
 	testContent := `{
 		"sourceLanguage": "en",
