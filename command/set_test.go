@@ -97,7 +97,7 @@ func TestSetCommand_Execute_MissingArguments(t *testing.T) {
 	test.AssertEqual(t, int(status), 2) // ExitUsageError
 }
 
-func TestSetCommand_Execute_NonexistentKey(t *testing.T) {
+func TestSetCommand_Execute_CreatesNewKey(t *testing.T) {
 	testContent := `{
 		"sourceLanguage": "en",
 		"strings": {},
@@ -109,13 +109,79 @@ func TestSetCommand_Execute_NonexistentKey(t *testing.T) {
 	cmd := &SetCommand{}
 
 	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
-	flagSet.SetOutput(&strings.Builder{}) // Suppress error output
+	flagSet.SetOutput(&strings.Builder{})
 	cmd.SetFlags(flagSet)
-	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "nonexistent_key", "value"})
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "new_key", "値"})
 	test.AssertNoError(t, err)
 
 	status := cmd.Execute(context.Background(), flagSet)
-	test.AssertEqual(t, int(status), 1) // ExitFailure
+	test.AssertEqual(t, int(status), 0)
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	def, exists := xc.Strings["new_key"]
+	if !exists {
+		t.Fatal("new_key should have been created")
+	}
+	test.AssertEqual(t, def.Localizations["ja"].StringUnit.Value, "値")
+	test.AssertEqual(t, def.ExtractionState, "")
+}
+
+func TestSetCommand_Execute_StateIgnoredOnExistingKey(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"existing": {
+				"extractionState": "manual",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Old"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "en", "--state", "stale", "existing", "New"})
+	test.AssertNoError(t, err)
+
+	status := cmd.Execute(context.Background(), flagSet)
+	test.AssertEqual(t, int(status), 0)
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["existing"].ExtractionState, "manual")
+	test.AssertEqual(t, xc.Strings["existing"].Localizations["en"].StringUnit.Value, "New")
+}
+
+func TestSetCommand_Execute_CreatesNewKeyWithState(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "en", "--state", "manual", "manual_key", "Hello"})
+	test.AssertNoError(t, err)
+
+	status := cmd.Execute(context.Background(), flagSet)
+	test.AssertEqual(t, int(status), 0)
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["manual_key"].ExtractionState, "manual")
 }
 
 func TestSetCommand_Execute_FileNotFound(t *testing.T) {

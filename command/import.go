@@ -244,7 +244,11 @@ func parseKeyBracket(raw string) (string, string) {
 // setTranslation sets a translation value, handling both simple and variation keys.
 func setTranslation(xc *xcstrings.XCStrings, key, lang, value, variationPath string) error {
 	if variationPath == "" {
-		return xc.SetTranslation(key, lang, value)
+		if _, exists := xc.Strings[key]; !exists {
+			return fmt.Errorf("key '%s' not found", key)
+		}
+		_, err := xc.SetTranslation(key, lang, value, "")
+		return err
 	}
 
 	parts := splitPath(variationPath)
@@ -259,7 +263,10 @@ func setTranslation(xc *xcstrings.XCStrings, key, lang, value, variationPath str
 	if err != nil {
 		return err
 	}
-	_, err = xc.SetVariationTranslation(key, lang, value, opts)
+	if _, exists := xc.Strings[key]; !exists {
+		return fmt.Errorf("key '%s' not found", key)
+	}
+	_, _, err = xc.SetVariationTranslation(key, lang, value, opts, "")
 	return err
 }
 
