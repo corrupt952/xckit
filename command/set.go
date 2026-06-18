@@ -17,6 +17,7 @@ type SetCommand struct {
 	language string
 	plural   string
 	device   string
+	state    string
 	force    bool
 }
 
@@ -29,7 +30,7 @@ func (*SetCommand) Synopsis() string {
 }
 
 func (*SetCommand) Usage() string {
-	return "set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--force] <key> <value>: Set translation for a specific key and language\n"
+	return "set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--force] <key> <value>: Set translation, creating the key if it does not yet exist\n"
 }
 
 func (c *SetCommand) SetFlags(f *flag.FlagSet) {
@@ -37,6 +38,7 @@ func (c *SetCommand) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&c.language, "lang", "", "Target language code (e.g., ja, fr, de)")
 	f.StringVar(&c.plural, "plural", "", "Plural category (zero, one, two, few, many, other)")
 	f.StringVar(&c.device, "device", "", "Device variation (iphone, ipad, mac, appletv, applewatch, applevision, other)")
+	f.StringVar(&c.state, "state", "", "extractionState applied when the key is newly created (e.g. manual). Ignored when the key already exists.")
 	f.BoolVar(&c.force, "force", false, "Suppress migration warning when converting plain stringUnit to variations")
 }
 
@@ -72,24 +74,28 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 		return subcommands.ExitFailure
 	}
 
+	created := false
 	if c.plural != "" || c.device != "" {
 		opts := xcstrings.VariationOptions{
 			Plural: c.plural,
 			Device: c.device,
 		}
-		migrated, err := xcs.SetVariationTranslation(key, c.language, value, opts)
+		migrated, wasCreated, err := xcs.SetVariationTranslation(key, c.language, value, opts, c.state)
 		if err != nil {
 			fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 			return subcommands.ExitFailure
 		}
+		created = wasCreated
 		if migrated && !c.force {
 			fmt.Fprintf(os.Stderr, "Warning: existing plain stringUnit for key '%s' in language '%s' was migrated to variations\n", key, c.language)
 		}
 	} else {
-		if err := xcs.SetTranslation(key, c.language, value); err != nil {
+		wasCreated, err := xcs.SetTranslation(key, c.language, value, c.state)
+		if err != nil {
 			fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 			return subcommands.ExitFailure
 		}
+		created = wasCreated
 	}
 
 	filePath := c.filePath
@@ -102,6 +108,10 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 		return subcommands.ExitFailure
 	}
 
-	fmt.Printf("Successfully set translation for key '%s' in language '%s'\n", key, c.language)
+	if created {
+		fmt.Printf("Successfully created key '%s' with translation for language '%s'\n", key, c.language)
+	} else {
+		fmt.Printf("Successfully set translation for key '%s' in language '%s'\n", key, c.language)
+	}
 	return subcommands.ExitSuccess
 }

@@ -16,6 +16,7 @@ func main() {
 	subcommands.Register(&command.UntranslatedCommand{}, "")
 	subcommands.Register(&command.ListCommand{}, "")
 	subcommands.Register(&command.SetCommand{}, "")
+	subcommands.Register(&command.RemoveCommand{}, "")
 	subcommands.Register(&command.StaleCommand{}, "")
 	subcommands.Register(&command.StatusCommand{}, "")
 	subcommands.Register(&command.VersionCommand{}, "")

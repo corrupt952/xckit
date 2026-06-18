@@ -281,40 +281,34 @@ func TestXCStrings_SetTranslation(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		key      string
-		language string
-		value    string
-		wantErr  bool
+		name        string
+		key         string
+		language    string
+		value       string
+		wantCreated bool
 	}{
 		{
-			name:     "set existing key",
-			key:      "existing_key",
-			language: "ja",
-			value:    "既存",
-			wantErr:  false,
+			name:        "set existing key",
+			key:         "existing_key",
+			language:    "ja",
+			value:       "既存",
+			wantCreated: false,
 		},
 		{
-			name:     "set nonexistent key",
-			key:      "nonexistent_key",
-			language: "ja",
-			value:    "存在しない",
-			wantErr:  true,
+			name:        "set nonexistent key creates it",
+			key:         "nonexistent_key",
+			language:    "ja",
+			value:       "新規",
+			wantCreated: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := xcstrings.SetTranslation(tt.key, tt.language, tt.value)
-
-			if tt.wantErr {
-				test.AssertError(t, err)
-				return
-			}
-
+			created, err := xcstrings.SetTranslation(tt.key, tt.language, tt.value, "")
 			test.AssertNoError(t, err)
+			test.AssertEqual(t, created, tt.wantCreated)
 
-			// Verify the translation was set
 			localization, exists := xcstrings.Strings[tt.key].Localizations[tt.language]
 			if !exists {
 				t.Errorf("translation not set for key %s, language %s", tt.key, tt.language)
@@ -325,6 +319,42 @@ func TestXCStrings_SetTranslation(t *testing.T) {
 			test.AssertEqual(t, localization.StringUnit.Value, tt.value)
 		})
 	}
+}
+
+func TestXCStrings_SetTranslation_CreatesWithInitialState(t *testing.T) {
+	x := &XCStrings{SourceLanguage: "en", Strings: map[string]StringDefinition{}}
+	created, err := x.SetTranslation("new.key", "en", "Hello", "manual")
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, created, true)
+	test.AssertEqual(t, x.Strings["new.key"].ExtractionState, "manual")
+}
+
+func TestXCStrings_SetTranslation_DoesNotOverrideExistingState(t *testing.T) {
+	x := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"keep.state": {
+				ExtractionState: "manual",
+				Localizations:   map[string]Localization{},
+			},
+		},
+	}
+	created, err := x.SetTranslation("keep.state", "ja", "テスト", "stale")
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, created, false)
+	test.AssertEqual(t, x.Strings["keep.state"].ExtractionState, "manual")
+}
+
+func TestXCStrings_RemoveKey(t *testing.T) {
+	x := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"present": {},
+		},
+	}
+	test.AssertEqual(t, x.RemoveKey("present"), true)
+	test.AssertEqual(t, len(x.Strings), 0)
+	test.AssertEqual(t, x.RemoveKey("absent"), false)
 }
 
 func TestXCStrings_SetTranslation_PreservesExistingLocalization(t *testing.T) {
@@ -343,7 +373,7 @@ func TestXCStrings_SetTranslation_PreservesExistingLocalization(t *testing.T) {
 	}
 
 	// Update the Japanese translation
-	err := xcstrings.SetTranslation("greeting", "ja", "やあ")
+	_, err := xcstrings.SetTranslation("greeting", "ja", "やあ", "")
 	test.AssertNoError(t, err)
 
 	// Verify the translation was updated
@@ -380,7 +410,7 @@ func TestXCStrings_SetTranslation_ClearsVariations(t *testing.T) {
 		},
 	}
 
-	err := xcstrings.SetTranslation("items_count", "ja", "アイテム")
+	_, err := xcstrings.SetTranslation("items_count", "ja", "アイテム", "")
 	test.AssertNoError(t, err)
 
 	loc := xcstrings.Strings["items_count"].Localizations["ja"]
@@ -419,7 +449,7 @@ func TestXCStrings_SetTranslation_ClearsSubstitutions(t *testing.T) {
 		},
 	}
 
-	err := xcstrings.SetTranslation("file_count", "ja", "ファイル")
+	_, err := xcstrings.SetTranslation("file_count", "ja", "ファイル", "")
 	test.AssertNoError(t, err)
 
 	loc := xcstrings.Strings["file_count"].Localizations["ja"]
@@ -453,7 +483,7 @@ func TestXCStrings_SetTranslation_ClearsVariations_RoundTrip(t *testing.T) {
 		Version: "1.0",
 	}
 
-	err := xcstrings.SetTranslation("items_count", "ja", "アイテム")
+	_, err := xcstrings.SetTranslation("items_count", "ja", "アイテム", "")
 	test.AssertNoError(t, err)
 
 	tmpDir := t.TempDir()
@@ -601,7 +631,7 @@ func TestXCStrings_LoadEmptyLocalizationsInitialized(t *testing.T) {
 	}
 
 	// Modify another key
-	err = xcstrings.SetTranslation("test", "ja", "テスト")
+	_, err = xcstrings.SetTranslation("test", "ja", "テスト", "")
 	test.AssertNoError(t, err)
 
 	// Save the file

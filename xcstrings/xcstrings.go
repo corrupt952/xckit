@@ -269,10 +269,21 @@ func (x *XCStrings) Languages() []string {
 	return languages
 }
 
-func (x *XCStrings) SetTranslation(key, language, value string) error {
+// SetTranslation upserts a plain stringUnit translation for the given key
+// and language. When the key does not exist it is created with the supplied
+// initialState as its extractionState (empty initialState leaves the field
+// unset, matching the Xcode default). Existing keys keep their extractionState
+// untouched. Returns (created, error) where created is true when the key was
+// newly added.
+func (x *XCStrings) SetTranslation(key, language, value, initialState string) (bool, error) {
 	definition, exists := x.Strings[key]
+	created := false
 	if !exists {
-		return fmt.Errorf("key '%s' not found", key)
+		created = true
+		definition = StringDefinition{
+			ExtractionState: initialState,
+			Localizations:   make(map[string]Localization),
+		}
 	}
 
 	if definition.Localizations == nil {
@@ -289,7 +300,17 @@ func (x *XCStrings) SetTranslation(key, language, value string) error {
 	definition.Localizations[language] = loc
 
 	x.Strings[key] = definition
-	return nil
+	return created, nil
+}
+
+// RemoveKey deletes the given key from the catalog regardless of its
+// extractionState. Returns true when the key was present and removed.
+func (x *XCStrings) RemoveKey(key string) bool {
+	if _, exists := x.Strings[key]; !exists {
+		return false
+	}
+	delete(x.Strings, key)
+	return true
 }
 
 // VariationOptions specifies which variation path to set a translation on.
@@ -305,12 +326,21 @@ var ValidPluralCategories = []string{"zero", "one", "two", "few", "many", "other
 var ValidDeviceCategories = []string{"iphone", "ipad", "mac", "appletv", "applewatch", "applevision", "other"}
 
 // SetVariationTranslation sets a translation within a variation structure.
-// It returns (migrated bool, err error) where migrated indicates that an existing
-// plain stringUnit was converted to a variation structure.
-func (x *XCStrings) SetVariationTranslation(key, language, value string, opts VariationOptions) (bool, error) {
+// When the key does not yet exist it is created with initialState as its
+// extractionState (empty initialState leaves the field unset). Existing keys
+// keep their extractionState untouched.
+// It returns (migrated, created, err) where migrated indicates that an
+// existing plain stringUnit was converted to a variation structure, and
+// created indicates that the key was newly added.
+func (x *XCStrings) SetVariationTranslation(key, language, value string, opts VariationOptions, initialState string) (bool, bool, error) {
 	definition, exists := x.Strings[key]
+	created := false
 	if !exists {
-		return false, fmt.Errorf("key '%s' not found", key)
+		created = true
+		definition = StringDefinition{
+			ExtractionState: initialState,
+			Localizations:   make(map[string]Localization),
+		}
 	}
 
 	if definition.Localizations == nil {
@@ -371,7 +401,7 @@ func (x *XCStrings) SetVariationTranslation(key, language, value string, opts Va
 
 	definition.Localizations[language] = loc
 	x.Strings[key] = definition
-	return migrated, nil
+	return migrated, created, nil
 }
 
 // KeysWithAnyUntranslated returns keys that have at least one untranslated language.

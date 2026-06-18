@@ -74,7 +74,8 @@ xckit import --format csv -f MyApp.xcstrings translations.csv
 |----------------|----------------------------------------------------------|
 | `list`         | List all keys with translation status                    |
 | `untranslated` | Find keys that need translation                          |
-| `set`          | Set a translation for a specific key and language        |
+| `set`          | Set a translation, creating the key if missing           |
+| `remove`       | Remove a key by name or by extractionState               |
 | `status`       | Show translation progress summary per language           |
 | `export`       | Export strings to CSV                                    |
 | `import`       | Import translations from CSV                             |
@@ -102,16 +103,30 @@ Shows keys that need translation. Without `--lang`, returns keys with any untran
 ### set
 
 ```bash
-xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--force] <key> <value>
+xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--force] <key> <value>
 ```
 
-Sets a translation for a specific key and language.
+Sets a translation for the given key/language. The key is created when it does not yet exist; existing keys are updated in place.
 
 - `--plural`: Set a plural variation (`zero`, `one`, `two`, `few`, `many`, `other`)
 - `--device`: Set a device variation (`iphone`, `ipad`, `mac`, `appletv`, `applewatch`, `applevision`, `other`)
+- `--state`: `extractionState` applied only when the key is created (e.g. `manual`). Ignored when the key already exists.
 - `--force`: Suppress the migration warning when converting a plain string to variations
 
 Plural and device flags can be combined to set nested variations (e.g., device > plural).
+
+### remove
+
+```bash
+xckit remove [-f file.xcstrings] [--state <state>] [--dry-run] [<key>]
+```
+
+Removes a key from the catalog regardless of its `extractionState`.
+
+- `<key>`: Remove that single key. Errors if the key does not exist.
+- `--state <state>`: Remove every key whose `extractionState` matches (e.g. `stale`, `manual`).
+- Combining `<key>` and `--state`: removes the named key only if its state matches.
+- `--dry-run`: Print the keys that would be removed without modifying the file.
 
 ### status
 
