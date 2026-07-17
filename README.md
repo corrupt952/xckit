@@ -80,6 +80,7 @@ xckit import --format csv -f MyApp.xcstrings translations.csv
 | `export`       | Export strings to CSV                                    |
 | `import`       | Import translations from CSV                             |
 | `stale`        | List or remove stale keys                                |
+| `lint`         | Statically validate the catalog for inconsistencies      |
 | `version`      | Print xckit version                                      |
 
 All commands accept `-f` (or `--file`) to specify the `.xcstrings` file path. When omitted, xckit looks for a `.xcstrings` file in the current directory.
@@ -219,6 +220,25 @@ xckit stale [-f file.xcstrings] [--remove] [--dry-run]
 ```
 
 Lists keys with `extractionState: stale`. Use `--remove` to delete them from the catalog, and `--dry-run` to preview without writing.
+
+### lint
+
+```bash
+xckit lint [-f file.xcstrings] [--json]
+```
+
+Statically validates a catalog for common inconsistencies that Xcode itself doesn't flag.
+
+| Rule | Severity | Description |
+| --- | --- | --- |
+| `format-specifier` | error | A translation's format specifiers (`%d`, `%@`, `%1$d`, `%#@name@`, ...) don't match the source language. Reordering with explicit positional specifiers (`%1$d` / `%2$d`) is allowed. |
+| `plural-missing-other` | error | A plural variation is missing the mandatory `other` category. |
+| `empty-key` | error | The catalog contains an empty string (`""`) key. |
+| `literal-newline` | warning | A value contains a literal newline character. |
+| `language-consistency` | error | Language codes differ only by case (e.g. `ja` and `JA` both present), or a language code appears on a single key while closely resembling a well-established one (likely typo). |
+| `substitution-structure` | error | A substitution has `argNum: 0`, an empty `formatSpecifier`, or is never referenced (`%#@name@`) by its host string. |
+
+Exits non-zero if any `error`-level issue is found (warnings alone exit 0), making it suitable for CI. Pass `--json` for a single JSON document: `{"issues": [{"rule", "severity", "key", "language"?, "path"?, "message"}]}`.
 
 ---
 
