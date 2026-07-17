@@ -34,14 +34,17 @@ Download a prebuilt binary from the [Releases](https://github.com/corrupt952/xck
 ### Nix
 
 ```bash
-# Run without installing
+# Run without installing (builds current main)
 nix run github:corrupt952/xckit -- --help
 
 # Install into your profile
 nix profile install github:corrupt952/xckit
+
+# Pin to a release tag (v0.2.1 or later) or any commit
+nix profile install github:corrupt952/xckit/v0.2.1
 ```
 
-Builds from source on the current main; `xckit version` reports the commit hash it was built from.
+Builds from source; `xckit version` reports the commit hash the build came from. Prebuilt binaries from [Releases](https://github.com/corrupt952/xckit/releases) report the semver tag instead.
 
 ### Build from source
 
