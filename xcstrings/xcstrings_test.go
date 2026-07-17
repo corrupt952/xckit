@@ -1396,6 +1396,50 @@ func TestLoad_Substitutions(t *testing.T) {
 	test.AssertEqual(t, one.StringUnit.Value, "%arg file")
 }
 
+func TestXCStrings_SetVariationTranslation_RejectsKeyWithSubstitutions(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"file_summary": {
+				Localizations: map[string]Localization{
+					"ja": {
+						StringUnit: &StringUnit{State: "translated", Value: "%#@files@ 個のファイル"},
+						Substitutions: map[string]Substitution{
+							"files": {
+								ArgNum:          1,
+								FormatSpecifier: "lld",
+								Variations: Variations{
+									Plural: map[PluralCategory]*VariationValue{
+										"other": {StringUnit: &StringUnit{State: "translated", Value: "%arg"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, _, err := xcstrings.SetVariationTranslation(
+		"file_summary", "ja", "1個のファイル", VariationOptions{Plural: "one"}, "",
+	)
+	if err == nil {
+		t.Fatal("expected error when setting a variation on a key whose localization has substitutions")
+	}
+
+	loc := xcstrings.Strings["file_summary"].Localizations["ja"]
+	if loc.StringUnit == nil || loc.StringUnit.Value != "%#@files@ 個のファイル" {
+		t.Error("expected original stringUnit to be left untouched")
+	}
+	if loc.Variations != nil {
+		t.Error("expected no variations to be created")
+	}
+	if loc.Substitutions == nil || loc.Substitutions["files"].Variations.Plural["other"].StringUnit.Value != "%arg" {
+		t.Error("expected substitutions to be left untouched")
+	}
+}
+
 func TestXCStrings_SetVariationTranslation_SeedsOtherOnPluralMigration(t *testing.T) {
 	xcstrings := &XCStrings{
 		SourceLanguage: "en",

@@ -414,6 +414,16 @@ func clearSubstitutionVariation(loc *xcstrings.Localization, def *xcstrings.Stri
 }
 
 // setSubstitutionTranslation sets a translation within a substitution variation.
+//
+// The catalog only records a substitution's argNum/formatSpecifier once, on
+// the Substitution struct itself, so a CSV row can only be applied safely if
+// the target key/language already has that substitution defined, or another
+// language of the same key defines it (in which case its argNum/
+// formatSpecifier are copied so the new substitution is structurally valid).
+// If neither is true, creating the substitution here would silently produce
+// argNum=0/formatSpecifier="" with no corresponding %#@name@ reference in the
+// host string -- a broken catalog that Xcode won't surface until it's opened.
+// Refusing (returning an error) lets the caller skip the row and warn instead.
 func setSubstitutionTranslation(xc *xcstrings.XCStrings, key, lang, value, subName string, parts []string) error {
 	def, exists := xc.Strings[key]
 	if !exists {
@@ -429,7 +439,17 @@ func setSubstitutionTranslation(xc *xcstrings.XCStrings, key, lang, value, subNa
 		loc.Substitutions = make(map[string]xcstrings.Substitution)
 	}
 
-	sub := loc.Substitutions[subName]
+	sub, subExists := loc.Substitutions[subName]
+	if !subExists {
+		template, found := findSubstitutionDefinition(def, lang, subName)
+		if !found {
+			return fmt.Errorf("substitution %q not defined for key %q in language %q (and no other language of this key defines it); refusing to create a broken substitution structure", subName, key, lang)
+		}
+		sub = xcstrings.Substitution{
+			ArgNum:          template.ArgNum,
+			FormatSpecifier: template.FormatSpecifier,
+		}
+	}
 
 	unit := &xcstrings.StringUnit{
 		State: "translated",
@@ -442,6 +462,21 @@ func setSubstitutionTranslation(xc *xcstrings.XCStrings, key, lang, value, subNa
 	def.Localizations[lang] = loc
 	xc.Strings[key] = def
 	return nil
+}
+
+// findSubstitutionDefinition searches the other localizations of key for a
+// substitution named subName, so its argNum/formatSpecifier can be copied
+// when creating the substitution for a language that doesn't have it yet.
+func findSubstitutionDefinition(def xcstrings.StringDefinition, excludeLang, subName string) (xcstrings.Substitution, bool) {
+	for otherLang, otherLoc := range def.Localizations {
+		if otherLang == excludeLang {
+			continue
+		}
+		if sub, ok := otherLoc.Substitutions[subName]; ok {
+			return sub, true
+		}
+	}
+	return xcstrings.Substitution{}, false
 }
 
 // setVariationUnit navigates and sets a variation leaf.

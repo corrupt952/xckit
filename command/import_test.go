@@ -280,6 +280,132 @@ func TestImportCommand_Execute_Substitutions(t *testing.T) {
 	test.AssertEqual(t, sub.Variations.Plural["other"].StringUnit.Value, "ファイル%arg個")
 }
 
+// TestImportCommand_Execute_SubstitutionsUnknownName verifies that a CSV row
+// referencing a substitution name that doesn't exist anywhere for the key
+// (not in the target language, not in any other language) is skipped rather
+// than silently creating a broken substitution (argNum=0, formatSpecifier="",
+// no corresponding %#@name@ reference in the host string).
+func TestImportCommand_Execute_SubstitutionsUnknownName(t *testing.T) {
+	xcContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"file_summary": {
+				"localizations": {
+					"en": {
+						"stringUnit": {"state": "translated", "value": "%#@files@ in %#@folders@"},
+						"substitutions": {
+							"files": {
+								"argNum": 1,
+								"formatSpecifier": "lld",
+								"variations": {
+									"plural": {
+										"one": {"stringUnit": {"state": "translated", "value": "%arg file"}},
+										"other": {"stringUnit": {"state": "translated", "value": "%arg files"}}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	csvContent := "key,comment,shouldTranslate,en:state,en,ja:state,ja\nfile_summary[substitutions.nonexistent.plural.other],,,translated,%arg files,,ファイル%arg個\n"
+
+	xcPath := test.TempFile(t, "test.xcstrings", xcContent)
+	csvPath := test.TempFile(t, "translations.csv", csvContent)
+
+	cmd := &ImportCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", xcPath, "--format", "csv", csvPath})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	if !strings.Contains(output, "1 skipped") {
+		t.Errorf("expected 1 skipped, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(xcPath)
+	test.AssertNoError(t, err)
+
+	loc := xc.Strings["file_summary"].Localizations["ja"]
+	if _, ok := loc.Substitutions["nonexistent"]; ok {
+		t.Error("expected no broken 'nonexistent' substitution to be created for ja")
+	}
+}
+
+// TestImportCommand_Execute_SubstitutionsCopiesDefinitionFromOtherLanguage
+// verifies that when the target language doesn't yet have a substitution but
+// another language of the same key does, the new substitution is created
+// with that language's argNum/formatSpecifier rather than defaulting to a
+// broken zero value.
+func TestImportCommand_Execute_SubstitutionsCopiesDefinitionFromOtherLanguage(t *testing.T) {
+	xcContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"file_summary": {
+				"localizations": {
+					"en": {
+						"stringUnit": {"state": "translated", "value": "%#@files@ in %#@folders@"},
+						"substitutions": {
+							"files": {
+								"argNum": 1,
+								"formatSpecifier": "lld",
+								"variations": {
+									"plural": {
+										"one": {"stringUnit": {"state": "translated", "value": "%arg file"}},
+										"other": {"stringUnit": {"state": "translated", "value": "%arg files"}}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	csvContent := "key,comment,shouldTranslate,en:state,en,ja:state,ja\nfile_summary[substitutions.files.plural.other],,,translated,%arg files,,ファイル%arg個\n"
+
+	xcPath := test.TempFile(t, "test.xcstrings", xcContent)
+	csvPath := test.TempFile(t, "translations.csv", csvContent)
+
+	cmd := &ImportCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", xcPath, "--format", "csv", csvPath})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	if !strings.Contains(output, "1 created") {
+		t.Errorf("expected 1 created, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(xcPath)
+	test.AssertNoError(t, err)
+
+	loc := xc.Strings["file_summary"].Localizations["ja"]
+	sub, ok := loc.Substitutions["files"]
+	if !ok {
+		t.Fatal("expected 'files' substitution to be created for ja")
+	}
+	test.AssertEqual(t, sub.ArgNum, 1)
+	test.AssertEqual(t, sub.FormatSpecifier, "lld")
+	test.AssertEqual(t, sub.Variations.Plural["other"].StringUnit.Value, "ファイル%arg個")
+}
+
 func TestImportCommand_Execute_DryRun(t *testing.T) {
 	xcContent := `{
 		"sourceLanguage": "en",

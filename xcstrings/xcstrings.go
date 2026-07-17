@@ -348,6 +348,19 @@ func (x *XCStrings) SetVariationTranslation(key, language, value string, opts Va
 	}
 
 	loc := definition.Localizations[language]
+
+	// A key whose localization already has substitutions can't safely gain a
+	// plural/device variation here: the host string's %#@name@ references and
+	// each substitution's own plural/device variations are a separate
+	// structure from the top-level variation this method writes, and there is
+	// no way to keep them consistent from a single argNum/value pair. Setting
+	// this would migrate (or overwrite) the host string while leaving the
+	// substitutions pointing at stale content. Reject instead of producing a
+	// silently broken catalog.
+	if len(loc.Substitutions) > 0 {
+		return false, false, fmt.Errorf("key %q language %q has substitutions; setting plural/device variations for keys with substitutions is not supported here -- use CSV export/import or Xcode instead", key, language)
+	}
+
 	migrated := false
 
 	// Check if we need to migrate from plain stringUnit to variations
