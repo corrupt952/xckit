@@ -341,6 +341,59 @@ func TestLintCommand_SubstitutionStructure(t *testing.T) {
 	}
 }
 
+func TestLintCommand_PositionalSubstitutionReferenceIsClean(t *testing.T) {
+	// Xcode emits positional substitution references (%1$#@name@) for
+	// multi-argument keys; they must satisfy both the substitution-structure
+	// host-reference check and the format-specifier comparison.
+	content := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"bulk_failed": {
+				"localizations": {
+					"en": {
+						"stringUnit": {"state": "translated", "value": "%1$#@actions@ of %2$#@total@ failed"},
+						"substitutions": {
+							"actions": {
+								"argNum": 1,
+								"formatSpecifier": "lld",
+								"variations": {"plural": {"other": {"stringUnit": {"state": "translated", "value": "%arg actions"}}}}
+							},
+							"total": {
+								"argNum": 2,
+								"formatSpecifier": "lld",
+								"variations": {"plural": {"other": {"stringUnit": {"state": "translated", "value": "%arg"}}}}
+							}
+						}
+					},
+					"ru": {
+						"stringUnit": {"state": "translated", "value": "%1$#@actions@ из %2$#@total@ не выполнено"},
+						"substitutions": {
+							"actions": {
+								"argNum": 1,
+								"formatSpecifier": "lld",
+								"variations": {"plural": {"other": {"stringUnit": {"state": "translated", "value": "%arg действий"}}}}
+							},
+							"total": {
+								"argNum": 2,
+								"formatSpecifier": "lld",
+								"variations": {"plural": {"other": {"stringUnit": {"state": "translated", "value": "%arg"}}}}
+							}
+						}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+	filePath := test.TempFile(t, "test.xcstrings", content)
+
+	output, status := runLintCommand(t, filePath)
+	test.AssertEqual(t, status, 0)
+	if !strings.Contains(output, "No issues found") {
+		t.Errorf("expected no issues for positional substitution references, got: %s", output)
+	}
+}
+
 func TestLintCommand_JSONOutput(t *testing.T) {
 	content := `{
 		"sourceLanguage": "en",

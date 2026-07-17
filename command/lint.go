@@ -416,15 +416,14 @@ func lintSubstitutionStructure(key, lang string, l xcstrings.Localization) []lin
 				Message:  "substitution has an empty formatSpecifier",
 			})
 		}
-		ref := "%#@" + name + "@"
-		if !strings.Contains(hostText.String(), ref) {
+		if !xcstrings.HostReferencesSubstitution(hostText.String(), name) {
 			issues = append(issues, lintIssue{
 				Rule:     "substitution-structure",
 				Severity: lintSeverityError,
 				Key:      key,
 				Language: lang,
 				Path:     "substitutions." + name,
-				Message:  fmt.Sprintf("host string never references %s", ref),
+				Message:  fmt.Sprintf("host string never references %%#@%s@", name),
 			})
 		}
 	}
@@ -540,7 +539,7 @@ func sortedStringIntKeys(m map[string]int) []string {
 // --- format specifier extraction & comparison ---
 
 var (
-	lintSubRefRe  = regexp.MustCompile(`%#@(\w+)@`)
+	lintSubRefRe  = regexp.MustCompile(`%(?:\d+\$)?#@(\w+)@`)
 	lintEscapedRe = regexp.MustCompile(`%%`)
 	lintArgRe     = regexp.MustCompile(`%(\d+\$)?arg\b`)
 	lintStdSpecRe = regexp.MustCompile(`%(\d+\$)?[-+ 0#']*\d*(?:\.\d+)?(hh|h|ll|l|q|L|z|j|t)?([@dioxXucsfeEgGaAp])`)
