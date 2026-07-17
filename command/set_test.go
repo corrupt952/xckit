@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"os"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"xckit/helper/test"
 	"xckit/xcstrings"
+
+	"github.com/google/subcommands"
 )
 
 func captureStderr(fn func()) string {
@@ -25,6 +28,26 @@ func captureStderr(fn func()) string {
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	return buf.String()
+}
+
+// withStdin temporarily replaces os.Stdin with a pipe fed by content, runs
+// fn, and restores the original os.Stdin afterward.
+func withStdin(t *testing.T, content string, fn func()) {
+	t.Helper()
+
+	old := os.Stdin
+	r, w, err := os.Pipe()
+	test.AssertNoError(t, err)
+
+	go func() {
+		w.WriteString(content)
+		w.Close()
+	}()
+
+	os.Stdin = r
+	defer func() { os.Stdin = old }()
+
+	fn()
 }
 
 func TestSetCommand_Execute(t *testing.T) {
@@ -711,4 +734,423 @@ func TestSetCommand_Execute_MultipleDeviceVariations(t *testing.T) {
 		t.Fatal("mac variation should exist")
 	}
 	test.AssertEqual(t, mac.StringUnit.Value, "クリック(Mac)")
+}
+
+func TestSetCommand_Execute_StdinBatch(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin"})
+	test.AssertNoError(t, err)
+
+	stdinContent := `{"key": "greeting", "lang": "ja", "value": "こんにちは!"}
+{"key": "farewell", "lang": "ja", "value": "さようなら"}
+{"key": "farewell", "lang": "en", "value": "Goodbye"}
+`
+
+	var output string
+	withStdin(t, stdinContent, func() {
+		output = captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 0)
+		})
+	})
+
+	if !strings.Contains(output, "Summary: 1 created, 2 updated") {
+		t.Errorf("output should contain batch summary, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+
+	test.AssertEqual(t, xc.Strings["greeting"].Localizations["ja"].StringUnit.Value, "こんにちは!")
+
+	farewell, exists := xc.Strings["farewell"]
+	if !exists {
+		t.Fatal("farewell key should have been created by the batch")
+	}
+	test.AssertEqual(t, farewell.Localizations["ja"].StringUnit.Value, "さようなら")
+	test.AssertEqual(t, farewell.Localizations["en"].StringUnit.Value, "Goodbye")
+}
+
+func TestSetCommand_Execute_StdinInvalidLineAbortsWholeBatch(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	beforeBytes, err := os.ReadFile(filePath)
+	test.AssertNoError(t, err)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err = flagSet.Parse([]string{"-f", filePath, "--stdin"})
+	test.AssertNoError(t, err)
+
+	// Second line is missing the required "lang" field, and the third line is
+	// malformed JSON; both should be reported and nothing should be written.
+	stdinContent := `{"key": "greeting", "lang": "ja", "value": "Updated"}
+{"key": "farewell", "value": "さようなら"}
+not valid json
+`
+
+	var status subcommands.ExitStatus
+	var errOutput string
+	withStdin(t, stdinContent, func() {
+		errOutput = captureStderr(func() {
+			captureOutput(func() {
+				status = cmd.Execute(context.Background(), flagSet)
+			})
+		})
+	})
+	test.AssertEqual(t, int(status), 2) // ExitUsageError
+
+	if !strings.Contains(errOutput, "line 2") || !strings.Contains(errOutput, "line 3") {
+		t.Errorf("error should report both invalid line numbers, got: %q", errOutput)
+	}
+
+	afterBytes, err := os.ReadFile(filePath)
+	test.AssertNoError(t, err)
+	if string(beforeBytes) != string(afterBytes) {
+		t.Error("file should not have been modified when the batch contains an invalid line")
+	}
+}
+
+func TestSetCommand_Execute_StdinRequireExistingReportsLineNumber(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin", "--require-existing"})
+	test.AssertNoError(t, err)
+
+	stdinContent := `{"key": "greeting", "lang": "ja", "value": "更新"}
+{"key": "does_not_exist", "lang": "ja", "value": "value"}
+`
+
+	var status subcommands.ExitStatus
+	var errOutput string
+	withStdin(t, stdinContent, func() {
+		errOutput = captureStderr(func() {
+			captureOutput(func() {
+				status = cmd.Execute(context.Background(), flagSet)
+			})
+		})
+	})
+	test.AssertEqual(t, int(status), 2) // ExitUsageError
+
+	if !strings.Contains(errOutput, "line 2") || !strings.Contains(errOutput, "does_not_exist") {
+		t.Errorf("error should report line number and key, got: %q", errOutput)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["greeting"].Localizations["ja"].StringUnit.Value, "こんにちは")
+}
+
+func TestSetCommand_Execute_DryRunDoesNotWriteFile(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	beforeBytes, err := os.ReadFile(filePath)
+	test.AssertNoError(t, err)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err = flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--dry-run", "greeting", "変更後"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	if !strings.Contains(output, "[dry-run]") {
+		t.Errorf("output should be marked as dry-run, got: %q", output)
+	}
+
+	afterBytes, err := os.ReadFile(filePath)
+	test.AssertNoError(t, err)
+	if string(beforeBytes) != string(afterBytes) {
+		t.Error("file should not have been modified by --dry-run")
+	}
+}
+
+func TestSetCommand_Execute_StdinDryRunDoesNotWriteFile(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	beforeBytes, err := os.ReadFile(filePath)
+	test.AssertNoError(t, err)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err = flagSet.Parse([]string{"-f", filePath, "--stdin", "--dry-run"})
+	test.AssertNoError(t, err)
+
+	stdinContent := `{"key": "greeting", "lang": "ja", "value": "変更後"}
+{"key": "new_key", "lang": "ja", "value": "新規"}
+`
+
+	var output string
+	withStdin(t, stdinContent, func() {
+		output = captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 0)
+		})
+	})
+
+	if !strings.Contains(output, "Summary: 1 created, 1 updated") {
+		t.Errorf("output should contain batch summary, got: %q", output)
+	}
+
+	afterBytes, err := os.ReadFile(filePath)
+	test.AssertNoError(t, err)
+	if string(beforeBytes) != string(afterBytes) {
+		t.Error("file should not have been modified by --stdin --dry-run")
+	}
+}
+
+func TestSetCommand_Execute_JSONOutput(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--json", "greeting", "こんにちは"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed setJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v for output: %q", err, output)
+	}
+
+	if len(parsed.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(parsed.Results))
+	}
+	// "greeting" already exists in the fixture (only its "en" localization is
+	// set), so adding a "ja" localization to it is an update to the key, not
+	// a new key creation.
+	test.AssertEqual(t, parsed.Results[0].Key, "greeting")
+	test.AssertEqual(t, parsed.Results[0].Lang, "ja")
+	test.AssertEqual(t, parsed.Results[0].Action, "updated")
+	test.AssertEqual(t, parsed.Summary.Created, 0)
+	test.AssertEqual(t, parsed.Summary.Updated, 1)
+}
+
+func TestSetCommand_Execute_JSONOutput_CreatedKey(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--json", "new_key", "こんにちは"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed setJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v for output: %q", err, output)
+	}
+
+	if len(parsed.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(parsed.Results))
+	}
+	test.AssertEqual(t, parsed.Results[0].Action, "created")
+	test.AssertEqual(t, parsed.Summary.Created, 1)
+	test.AssertEqual(t, parsed.Summary.Updated, 0)
+}
+
+func TestSetCommand_Execute_StdinJSONOutput(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin", "--json"})
+	test.AssertNoError(t, err)
+
+	stdinContent := `{"key": "greeting", "lang": "ja", "value": "更新"}
+{"key": "new_key", "lang": "ja", "value": "新規"}
+`
+
+	var output string
+	withStdin(t, stdinContent, func() {
+		output = captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 0)
+		})
+	})
+
+	var parsed setJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v for output: %q", err, output)
+	}
+	if len(parsed.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(parsed.Results))
+	}
+	test.AssertEqual(t, parsed.Summary.Created, 1)
+	test.AssertEqual(t, parsed.Summary.Updated, 1)
+}
+
+func TestSetCommand_Execute_StdinWithPositionalArgsErrors(t *testing.T) {
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"--stdin", "key", "value"})
+	test.AssertNoError(t, err)
+
+	status := cmd.Execute(context.Background(), flagSet)
+	test.AssertEqual(t, int(status), 2) // ExitUsageError
+}
+
+func TestSetCommand_Execute_StdinNewLanguagePropagatesWithinBatch(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin", "--allow-new-language"})
+	test.AssertNoError(t, err)
+
+	// "fr" is not yet present in the catalog. The first line introduces it
+	// (allowed because --allow-new-language is set); the second line reuses
+	// "fr" for a different key and should not be rejected as unknown.
+	stdinContent := `{"key": "greeting", "lang": "fr", "value": "Bonjour"}
+{"key": "farewell", "lang": "fr", "value": "Au revoir"}
+`
+
+	var status subcommands.ExitStatus
+	withStdin(t, stdinContent, func() {
+		captureOutput(func() {
+			status = cmd.Execute(context.Background(), flagSet)
+		})
+	})
+	test.AssertEqual(t, int(status), 0)
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["greeting"].Localizations["fr"].StringUnit.Value, "Bonjour")
+	test.AssertEqual(t, xc.Strings["farewell"].Localizations["fr"].StringUnit.Value, "Au revoir")
 }

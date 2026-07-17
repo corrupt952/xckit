@@ -108,7 +108,8 @@ Shows keys that need translation. Without `--lang`, returns keys with any untran
 ### set
 
 ```bash
-xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--force] [--allow-new-language] <key> <value>
+xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--force] [--allow-new-language] [--require-existing] [--dry-run] [--json] <key> <value>
+xckit set [-f file.xcstrings] --stdin [--force] [--allow-new-language] [--require-existing] [--dry-run] [--json]
 ```
 
 Sets a translation for the given key/language. The key is created when it does not yet exist; existing keys are updated in place.
@@ -118,6 +119,9 @@ Sets a translation for the given key/language. The key is created when it does n
 - `--state`: `extractionState` applied only when the key is created (e.g. `manual`). Ignored when the key already exists.
 - `--force`: Suppress the migration warning when converting a plain string to variations
 - `--allow-new-language`: Allow adding a language that is not yet present in the catalog
+- `--require-existing`: Fail instead of silently creating a new key (protects against typoed keys creating an unintended new entry)
+- `--dry-run`: Preview what would be created/updated without writing the file
+- `--json`: Print a structured JSON document instead of human-readable text (combinable with `--dry-run`)
 
 Plural and device flags can be combined to set nested variations (e.g., device > plural).
 
@@ -126,6 +130,41 @@ Plural and device flags can be combined to set nested variations (e.g., device >
 **Format specifiers (`%d` vs `%lld`):** Swift string interpolation of an `Int` (e.g. `"\(count) items"`) generates `%lld` in the catalog. When adding plural variations manually, match the specifier your code actually generates — usually `%lld` for `Int` interpolation — otherwise the catalog entry won't line up with what Xcode extracts.
 
 **Language validation:** `--lang` must match a language already present in the catalog (any language used in a key's `localizations`, or the catalog's `sourceLanguage`) unless `--allow-new-language` is passed. This prevents typos (e.g. `--lang jp`) or case mismatches (e.g. `--lang JA` instead of `ja`) from silently creating a bogus new language column. When a match is unrecognized, the error suggests the closest existing language code (`did you mean "ja"?`) when one can be inferred. If the catalog has no languages yet (a brand-new catalog), the first `set` call is never blocked, so seeding the very first translation doesn't require `--allow-new-language`.
+
+**Batch input (`--stdin`):** reads newline-delimited JSON (NDJSON) from stdin, one object per line, and applies every line in a single process run with a single atomic write. This is the efficient way to script many translations at once (e.g. many keys x many languages) instead of spawning `set` once per key/language pair. `--stdin` cannot be combined with the positional `<key> <value>` arguments, and `--lang`/`--plural`/`--device`/`--state` are taken per line instead of as flags. Each line's schema is:
+
+```json
+{"key": "greeting", "lang": "ja", "value": "こんにちは", "plural": "other", "device": "iphone", "state": "manual"}
+```
+
+- `key`, `lang`, `value`: required
+- `plural`, `device`, `state`: optional, same meaning as the equivalent single-`set` flags
+
+Example:
+
+```bash
+printf '%s\n' \
+  '{"key": "greeting", "lang": "ja", "value": "こんにちは"}' \
+  '{"key": "greeting", "lang": "fr", "value": "Bonjour"}' \
+  '{"key": "item_count", "lang": "ja", "value": "%lldつのアイテム", "plural": "other"}' \
+  | xckit set -f Localizable.xcstrings --stdin
+```
+
+All lines are parsed and validated (including language validation) before anything is applied — if any single line is malformed or fails validation, nothing is written and every offending line is reported by line number. `--allow-new-language` applies to the whole batch: once a new language is introduced by an earlier line, later lines in the same batch may reuse it without repeating validation failures. The command prints a per-line result plus a final `Summary: N created, M updated` line (or the equivalent `--json` document).
+
+**`--json` output**, for both single and `--stdin` invocations:
+
+```json
+{
+  "results": [
+    {"key": "greeting", "lang": "ja", "action": "created"},
+    {"key": "item_count", "lang": "ja", "action": "updated", "path": "plural.other"}
+  ],
+  "summary": {"created": 1, "updated": 1}
+}
+```
+
+`action` is `created` when the key itself was newly added to the catalog, and `updated` when an existing key gained or changed a localization. `path` is present only for plural/device variations and describes where within the variation structure the value was written (e.g. `plural.other`, `device.iphone`, `device.iphone.plural.one`); it is omitted for plain string translations.
 
 ### remove
 
