@@ -22,6 +22,9 @@ type SetCommand struct {
 	device           string
 	state            string
 	comment          string
+	substitution     string
+	argNum           int
+	formatSpecifier  string
 	force            bool
 	allowNewLanguage bool
 	stdin            bool
@@ -39,9 +42,10 @@ func (*SetCommand) Synopsis() string {
 }
 
 func (*SetCommand) Usage() string {
-	return "set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--comment <text>] [--force] [--require-existing] [--dry-run] [--json] <key> <value>: Set translation, creating the key if it does not yet exist\n" +
-		"set [-f file.xcstrings] --stdin [--allow-new-language] [--force] [--require-existing] [--dry-run] [--json]: Apply a batch of translations from NDJSON on stdin, one object per line: {\"key\", \"lang\", \"value\", \"plural\"?, \"device\"?, \"state\"?, \"comment\"?}\n" +
-		"  --comment sets or updates the key's translator-facing comment (pass an empty string to clear it); it is applied together with the value and cannot be combined with --stdin. In NDJSON rows, an omitted \"comment\" field leaves the existing comment untouched, while an explicit \"comment\": \"\" clears it.\n"
+	return "set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--comment <text>] [--substitution <name> --plural <category> [--arg-num <n>] [--format-specifier <spec>]] [--force] [--require-existing] [--dry-run] [--json] <key> <value>: Set translation, creating the key if it does not yet exist\n" +
+		"set [-f file.xcstrings] --stdin [--allow-new-language] [--force] [--require-existing] [--dry-run] [--json]: Apply a batch of translations from NDJSON on stdin, one object per line: {\"key\", \"lang\", \"value\", \"plural\"?, \"device\"?, \"state\"?, \"comment\"?, \"substitution\"?, \"argNum\"?, \"formatSpecifier\"?}\n" +
+		"  --comment sets or updates the key's translator-facing comment (pass an empty string to clear it); it is applied together with the value and cannot be combined with --stdin. In NDJSON rows, an omitted \"comment\" field leaves the existing comment untouched, while an explicit \"comment\": \"\" clears it.\n" +
+		"  --substitution <name> writes <value> into substitutions.<name>.variations.plural.<category> instead of the top-level translation; it requires --plural and does not support --device. If <name> already exists for --lang, the value is written directly. If it exists for another language of the same key, its argNum/formatSpecifier are copied when creating it for --lang. Otherwise --arg-num and --format-specifier are required, and the key's host string for --lang must already contain a %#@<name>@ reference (set it first with a plain `set`). The key must already exist.\n"
 }
 
 func (c *SetCommand) SetFlags(f *flag.FlagSet) {
@@ -51,6 +55,9 @@ func (c *SetCommand) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&c.device, "device", "", "Device variation (iphone, ipad, mac, appletv, applewatch, applevision, other)")
 	f.StringVar(&c.state, "state", "", "extractionState applied when the key is newly created (e.g. manual). Ignored when the key already exists.")
 	f.StringVar(&c.comment, "comment", "", "Set or update the key's translator-facing comment; pass an empty string to clear it. Cannot be combined with --stdin (use the NDJSON \"comment\" field instead).")
+	f.StringVar(&c.substitution, "substitution", "", "Substitution name; writes the value into substitutions.<name>.variations.plural.<category>. Requires --plural; does not support --device.")
+	f.IntVar(&c.argNum, "arg-num", 0, "1-based printf argument index, required together with --format-specifier when --substitution names a substitution not yet defined for any language of the key")
+	f.StringVar(&c.formatSpecifier, "format-specifier", "", "printf format specifier (e.g. lld), required together with --arg-num when --substitution names a substitution not yet defined for any language of the key")
 	f.BoolVar(&c.force, "force", false, "Suppress migration warning when converting plain stringUnit to variations")
 	f.BoolVar(&c.allowNewLanguage, "allow-new-language", false, "Allow adding a language that is not yet present in the catalog")
 	f.BoolVar(&c.stdin, "stdin", false, "Read NDJSON lines from stdin and apply them in a single batch instead of taking <key> <value> arguments")
@@ -127,6 +134,11 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 		return subcommands.ExitUsageError
 	}
 
+	if err := validateSubstitutionFlags(c.substitution, c.plural, c.device, c.argNum, c.formatSpecifier); err != nil {
+		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		return subcommands.ExitUsageError
+	}
+
 	key := f.Arg(0)
 	value := f.Arg(1)
 
@@ -153,7 +165,7 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 		comment = &c.comment
 	}
 
-	result, migrated, err := applySetTranslation(xcs, key, c.language, value, c.plural, c.device, c.state, comment)
+	result, migrated, err := applySetTranslation(xcs, key, c.language, value, c.plural, c.device, c.state, comment, c.substitution, c.argNum, c.formatSpecifier)
 	if err != nil {
 		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
@@ -192,12 +204,7 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 	if c.dryRun {
 		prefix = "[dry-run] "
 	}
-	commentSuffix := commentActionSuffix(result.CommentAction)
-	if result.Action == "created" {
-		fmt.Printf("%sSuccessfully created key '%s' with translation for language '%s'%s\n", prefix, key, c.language, commentSuffix)
-	} else {
-		fmt.Printf("%sSuccessfully set translation for key '%s' in language '%s'%s\n", prefix, key, c.language, commentSuffix)
-	}
+	fmt.Printf("%s%s\n", prefix, setResultMessage(result))
 	return subcommands.ExitSuccess
 }
 
@@ -205,13 +212,16 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 // Comment is a pointer so that an omitted field (nil) can be distinguished
 // from an explicit empty string, which clears the key's existing comment.
 type setStdinRow struct {
-	Key     string  `json:"key"`
-	Lang    string  `json:"lang"`
-	Value   string  `json:"value"`
-	Plural  string  `json:"plural,omitempty"`
-	Device  string  `json:"device,omitempty"`
-	State   string  `json:"state,omitempty"`
-	Comment *string `json:"comment,omitempty"`
+	Key             string  `json:"key"`
+	Lang            string  `json:"lang"`
+	Value           string  `json:"value"`
+	Plural          string  `json:"plural,omitempty"`
+	Device          string  `json:"device,omitempty"`
+	State           string  `json:"state,omitempty"`
+	Comment         *string `json:"comment,omitempty"`
+	Substitution    string  `json:"substitution,omitempty"`
+	ArgNum          int     `json:"argNum,omitempty"`
+	FormatSpecifier string  `json:"formatSpecifier,omitempty"`
 }
 
 // stdinRowEntry pairs a parsed row with its 1-based line number for error reporting.
@@ -271,6 +281,11 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 			continue
 		}
 
+		if err := validateSubstitutionFlags(row.Substitution, row.Plural, row.Device, row.ArgNum, row.FormatSpecifier); err != nil {
+			validationErrs = append(validationErrs, fmt.Sprintf("line %d: %v", entry.line, err))
+			continue
+		}
+
 		if len(knownLangs) > 0 && !slices.Contains(knownLangs, row.Lang) {
 			if c.allowNewLanguage {
 				knownLangs = append(knownLangs, row.Lang)
@@ -304,7 +319,7 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 	results := make([]setResult, 0, len(entries))
 	for _, entry := range entries {
 		row := entry.row
-		result, migrated, err := applySetTranslation(xcs, row.Key, row.Lang, row.Value, row.Plural, row.Device, row.State, row.Comment)
+		result, migrated, err := applySetTranslation(xcs, row.Key, row.Lang, row.Value, row.Plural, row.Device, row.State, row.Comment, row.Substitution, row.ArgNum, row.FormatSpecifier)
 		if err != nil {
 			fmt.Fprintf(flag.CommandLine.Output(), "Error: line %d: %v\n", entry.line, err)
 			return subcommands.ExitFailure
@@ -348,12 +363,7 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 		prefix = "[dry-run] "
 	}
 	for _, r := range results {
-		commentSuffix := commentActionSuffix(r.CommentAction)
-		if r.Action == "created" {
-			fmt.Printf("%sSuccessfully created key '%s' with translation for language '%s'%s\n", prefix, r.Key, r.Lang, commentSuffix)
-		} else {
-			fmt.Printf("%sSuccessfully set translation for key '%s' in language '%s'%s\n", prefix, r.Key, r.Lang, commentSuffix)
-		}
+		fmt.Printf("%s%s\n", prefix, setResultMessage(r))
 	}
 	fmt.Printf("%sSummary: %d created, %d updated\n", prefix, summary.Created, summary.Updated)
 	return subcommands.ExitSuccess
@@ -391,18 +401,31 @@ func parseStdinRows(r *os.File) ([]stdinRowEntry, []string) {
 }
 
 // applySetTranslation applies a single key/lang/value translation (optionally
-// within a plural/device variation) to xcs, mirroring the plain-vs-variation
+// within a plural/device variation, or within a named substitution's plural
+// variation) to xcs, mirroring the plain-vs-variation-vs-substitution
 // branching used by the single-shot `set` command. When comment is non-nil,
 // the key's translator-facing comment is also set to *comment (an empty
 // string clears it); comment == nil leaves any existing comment untouched.
 // It returns the resulting setResult, whether an existing plain stringUnit
 // was migrated to variations, and any error from the underlying xcstrings
 // API.
-func applySetTranslation(xcs *xcstrings.XCStrings, key, lang, value, plural, device, state string, comment *string) (setResult, bool, error) {
+func applySetTranslation(xcs *xcstrings.XCStrings, key, lang, value, plural, device, state string, comment *string, substitution string, argNum int, formatSpecifier string) (setResult, bool, error) {
 	var result setResult
 	var migrated bool
 
-	if plural != "" || device != "" {
+	switch {
+	case substitution != "":
+		opts := xcstrings.VariationOptions{Plural: plural}
+		created, err := xcs.SetSubstitutionTranslation(key, lang, substitution, value, opts, argNum, formatSpecifier)
+		if err != nil {
+			return setResult{}, false, err
+		}
+		action := "updated"
+		if created {
+			action = "created"
+		}
+		result = setResult{Key: key, Lang: lang, Action: action, Path: substitutionPath(substitution, plural)}
+	case plural != "" || device != "":
 		opts := xcstrings.VariationOptions{Plural: plural, Device: device}
 		m, created, err := xcs.SetVariationTranslation(key, lang, value, opts, state)
 		if err != nil {
@@ -414,7 +437,7 @@ func applySetTranslation(xcs *xcstrings.XCStrings, key, lang, value, plural, dev
 		}
 		result = setResult{Key: key, Lang: lang, Action: action, Path: variationPath(plural, device)}
 		migrated = m
-	} else {
+	default:
 		created, err := xcs.SetTranslation(key, lang, value, state)
 		if err != nil {
 			return setResult{}, false, err
@@ -454,6 +477,27 @@ func commentActionSuffix(action string) string {
 	}
 }
 
+// setResultMessage renders the human-readable line printed for a single
+// setResult. "created" means different things depending on where the
+// translation was written: for a plain or plural/device translation it means
+// the key itself was newly added, while for a substitution it means the
+// named substitution was newly defined for that language (the key always
+// already existed, since SetSubstitutionTranslation never creates one) --
+// so the wording is chosen accordingly rather than always claiming the key
+// was created.
+func setResultMessage(r setResult) string {
+	commentSuffix := commentActionSuffix(r.CommentAction)
+	isSubstitution := strings.HasPrefix(r.Path, "substitutions.")
+	switch {
+	case r.Action == "created" && isSubstitution:
+		return fmt.Sprintf("Successfully created substitution and set translation for key '%s' in language '%s'%s", r.Key, r.Lang, commentSuffix)
+	case r.Action == "created":
+		return fmt.Sprintf("Successfully created key '%s' with translation for language '%s'%s", r.Key, r.Lang, commentSuffix)
+	default:
+		return fmt.Sprintf("Successfully set translation for key '%s' in language '%s'%s", r.Key, r.Lang, commentSuffix)
+	}
+}
+
 // variationPath renders a short, human-readable path describing where within
 // the localization's variation structure a translation was written.
 func variationPath(plural, device string) string {
@@ -467,6 +511,31 @@ func variationPath(plural, device string) string {
 	default:
 		return ""
 	}
+}
+
+// substitutionPath renders the variation path reported for a translation
+// written into a named substitution's plural variation.
+func substitutionPath(substitution, plural string) string {
+	return fmt.Sprintf("substitutions.%s.plural.%s", substitution, plural)
+}
+
+// validateSubstitutionFlags enforces the constraints `set --substitution`
+// operates under: it requires --plural, does not support --device, and
+// --arg-num/--format-specifier are only meaningful alongside it.
+func validateSubstitutionFlags(substitution, plural, device string, argNum int, formatSpecifier string) error {
+	if substitution != "" {
+		if plural == "" {
+			return fmt.Errorf("--substitution requires --plural")
+		}
+		if device != "" {
+			return fmt.Errorf("--substitution does not support --device")
+		}
+		return nil
+	}
+	if argNum != 0 || formatSpecifier != "" {
+		return fmt.Errorf("--arg-num and --format-specifier require --substitution")
+	}
+	return nil
 }
 
 // summarizeSetResults tallies created/updated counts across a batch of results.

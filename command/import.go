@@ -420,110 +420,19 @@ func clearSubstitutionVariation(loc *xcstrings.Localization, def *xcstrings.Stri
 // the target key/language already has that substitution defined, or another
 // language of the same key defines it (in which case its argNum/
 // formatSpecifier are copied so the new substitution is structurally valid).
-// If neither is true, creating the substitution here would silently produce
-// argNum=0/formatSpecifier="" with no corresponding %#@name@ reference in the
-// host string -- a broken catalog that Xcode won't surface until it's opened.
-// Refusing (returning an error) lets the caller skip the row and warn instead.
+// This is CSV import's original behavior, preserved by delegating to
+// xcstrings.SetSubstitutionTranslation with argNum=0/formatSpecifier="" --
+// values that can never satisfy that method's from-scratch creation path, so
+// a substitution name unknown to every language of the key is refused rather
+// than silently producing a broken catalog. Refusing (returning an error)
+// lets the caller skip the row and warn instead.
 func setSubstitutionTranslation(xc *xcstrings.XCStrings, key, lang, value, subName string, parts []string) error {
-	def, exists := xc.Strings[key]
-	if !exists {
-		return fmt.Errorf("key '%s' not found", key)
+	opts, err := parseVariationOpts(parts)
+	if err != nil {
+		return err
 	}
-
-	if def.Localizations == nil {
-		def.Localizations = make(map[string]xcstrings.Localization)
-	}
-
-	loc := def.Localizations[lang]
-	if loc.Substitutions == nil {
-		loc.Substitutions = make(map[string]xcstrings.Substitution)
-	}
-
-	sub, subExists := loc.Substitutions[subName]
-	if !subExists {
-		template, found := findSubstitutionDefinition(def, lang, subName)
-		if !found {
-			return fmt.Errorf("substitution %q not defined for key %q in language %q (and no other language of this key defines it); refusing to create a broken substitution structure", subName, key, lang)
-		}
-		sub = xcstrings.Substitution{
-			ArgNum:          template.ArgNum,
-			FormatSpecifier: template.FormatSpecifier,
-		}
-	}
-
-	unit := &xcstrings.StringUnit{
-		State: "translated",
-		Value: value,
-	}
-
-	setVariationUnit(&sub.Variations, parts, unit)
-
-	loc.Substitutions[subName] = sub
-	def.Localizations[lang] = loc
-	xc.Strings[key] = def
-	return nil
-}
-
-// findSubstitutionDefinition searches the other localizations of key for a
-// substitution named subName, so its argNum/formatSpecifier can be copied
-// when creating the substitution for a language that doesn't have it yet.
-func findSubstitutionDefinition(def xcstrings.StringDefinition, excludeLang, subName string) (xcstrings.Substitution, bool) {
-	for otherLang, otherLoc := range def.Localizations {
-		if otherLang == excludeLang {
-			continue
-		}
-		if sub, ok := otherLoc.Substitutions[subName]; ok {
-			return sub, true
-		}
-	}
-	return xcstrings.Substitution{}, false
-}
-
-// setVariationUnit navigates and sets a variation leaf.
-func setVariationUnit(v *xcstrings.Variations, parts []string, unit *xcstrings.StringUnit) {
-	if len(parts) < 2 {
-		return
-	}
-	varType := parts[0]
-	varKey := parts[1]
-	remaining := parts[2:]
-
-	switch varType {
-	case "plural":
-		if v.Plural == nil {
-			v.Plural = make(map[xcstrings.PluralCategory]*xcstrings.VariationValue)
-		}
-		if len(remaining) == 0 {
-			v.Plural[varKey] = &xcstrings.VariationValue{StringUnit: unit}
-		} else {
-			vv := v.Plural[varKey]
-			if vv == nil {
-				vv = &xcstrings.VariationValue{}
-			}
-			if vv.Variations == nil {
-				vv.Variations = &xcstrings.Variations{}
-			}
-			setVariationUnit(vv.Variations, remaining, unit)
-			v.Plural[varKey] = vv
-		}
-	case "device":
-		if v.Device == nil {
-			v.Device = make(map[string]*xcstrings.VariationValue)
-		}
-		if len(remaining) == 0 {
-			v.Device[varKey] = &xcstrings.VariationValue{StringUnit: unit}
-		} else {
-			vv := v.Device[varKey]
-			if vv == nil {
-				vv = &xcstrings.VariationValue{}
-			}
-			if vv.Variations == nil {
-				vv.Variations = &xcstrings.Variations{}
-			}
-			setVariationUnit(vv.Variations, remaining, unit)
-			v.Device[varKey] = vv
-		}
-	}
+	_, err = xc.SetSubstitutionTranslation(key, lang, subName, value, opts, 0, "")
+	return err
 }
 
 // parseVariationOpts converts path parts to VariationOptions.

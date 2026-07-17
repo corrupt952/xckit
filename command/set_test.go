@@ -1429,3 +1429,423 @@ func TestSetCommand_Execute_JSONOutput_CommentAction(t *testing.T) {
 	}
 	test.AssertEqual(t, parsed.Results[0].CommentAction, "set")
 }
+
+// substitutionTestFixture returns catalog JSON for a key whose "en" and "ja"
+// localizations both already define the "files" substitution (argNum 1,
+// formatSpecifier "lld", plural one/other), while "ru" has only the host
+// string (referencing %#@files@) with no substitution defined yet. This lets
+// tests exercise all three substitution-write cases: writing to an existing
+// substitution (en/ja), copying an existing definition from another language
+// (ru, from en or ja), and -- by using a name other than "files" -- creating
+// a substitution that exists nowhere.
+func substitutionTestFixture() string {
+	return `{
+		"sourceLanguage": "en",
+		"strings": {
+			"file_summary": {
+				"localizations": {
+					"en": {
+						"stringUnit": {"state": "translated", "value": "%#@files@ found"},
+						"substitutions": {
+							"files": {
+								"argNum": 1,
+								"formatSpecifier": "lld",
+								"variations": {
+									"plural": {
+										"one": {"stringUnit": {"state": "translated", "value": "%arg file"}},
+										"other": {"stringUnit": {"state": "translated", "value": "%arg files"}}
+									}
+								}
+							}
+						}
+					},
+					"ja": {
+						"stringUnit": {"state": "translated", "value": "%#@files@ 件見つかりました"},
+						"substitutions": {
+							"files": {
+								"argNum": 1,
+								"formatSpecifier": "lld",
+								"variations": {
+									"plural": {
+										"other": {"stringUnit": {"state": "translated", "value": "%arg件"}}
+									}
+								}
+							}
+						}
+					},
+					"ru": {
+						"stringUnit": {"state": "translated", "value": "%#@files@ найдено"}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+}
+
+func TestSetCommand_Execute_SubstitutionExistingWritesDirectly(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--substitution", "files", "--plural", "one", "file_summary", "%arg件"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+	if !strings.Contains(output, "Successfully set translation") {
+		t.Errorf("output should report a plain update (substitution already existed), got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+
+	sub := xc.Strings["file_summary"].Localizations["ja"].Substitutions["files"]
+	test.AssertEqual(t, sub.ArgNum, 1)
+	test.AssertEqual(t, sub.FormatSpecifier, "lld")
+	test.AssertEqual(t, sub.Variations.Plural["one"].StringUnit.Value, "%arg件")
+	// The pre-existing "other" leaf must be untouched.
+	test.AssertEqual(t, sub.Variations.Plural["other"].StringUnit.Value, "%arg件")
+}
+
+func TestSetCommand_Execute_SubstitutionCopiesDefinitionFromOtherLanguage(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ru", "--substitution", "files", "--plural", "one", "file_summary", "%arg файл"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+	if !strings.Contains(output, "Successfully created substitution") {
+		t.Errorf("output should report the substitution as newly created for ru, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+
+	sub, ok := xc.Strings["file_summary"].Localizations["ru"].Substitutions["files"]
+	if !ok {
+		t.Fatal("expected 'files' substitution to be created for ru")
+	}
+	test.AssertEqual(t, sub.ArgNum, 1)
+	test.AssertEqual(t, sub.FormatSpecifier, "lld")
+	test.AssertEqual(t, sub.Variations.Plural["one"].StringUnit.Value, "%arg файл")
+}
+
+func TestSetCommand_Execute_SubstitutionCreatesBrandNewDefinition(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{
+		"-f", filePath, "--lang", "en", "--substitution", "folders", "--plural", "other",
+		"--arg-num", "2", "--format-specifier", "lld",
+		"file_summary", "%arg folders",
+	})
+	test.AssertNoError(t, err)
+
+	// The host string must reference %#@folders@ before a brand new
+	// substitution can be created; the fixture's "en" host string doesn't,
+	// so this attempt is expected to fail.
+	errOutput := captureStderr(func() {
+		captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 1)
+		})
+	})
+	if !strings.Contains(errOutput, "does not reference %#@folders@") {
+		t.Errorf("expected a missing host reference error, got: %q", errOutput)
+	}
+
+	// Now point the host string at %#@folders@ first, then retry.
+	setHostCmd := &SetCommand{}
+	hostFlagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	setHostCmd.SetFlags(hostFlagSet)
+	err = hostFlagSet.Parse([]string{"-f", filePath, "--lang", "en", "file_summary", "%#@folders@ found in %#@files@"})
+	test.AssertNoError(t, err)
+	captureOutput(func() {
+		status := setHostCmd.Execute(context.Background(), hostFlagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	retryCmd := &SetCommand{}
+	retryFlagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	retryCmd.SetFlags(retryFlagSet)
+	err = retryFlagSet.Parse([]string{
+		"-f", filePath, "--lang", "en", "--substitution", "folders", "--plural", "other",
+		"--arg-num", "2", "--format-specifier", "lld",
+		"file_summary", "%arg folders",
+	})
+	test.AssertNoError(t, err)
+	retryOutput := captureOutput(func() {
+		status := retryCmd.Execute(context.Background(), retryFlagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+	if !strings.Contains(retryOutput, "Successfully created substitution") {
+		t.Errorf("expected creation success, got: %q", retryOutput)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	sub, ok := xc.Strings["file_summary"].Localizations["en"].Substitutions["folders"]
+	if !ok {
+		t.Fatal("expected 'folders' substitution to be created for en")
+	}
+	test.AssertEqual(t, sub.ArgNum, 2)
+	test.AssertEqual(t, sub.FormatSpecifier, "lld")
+	test.AssertEqual(t, sub.Variations.Plural["other"].StringUnit.Value, "%arg folders")
+}
+
+func TestSetCommand_Execute_SubstitutionCreateRequiresArgNumAndFormatSpecifier(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	// "folders" is not defined for any language and --arg-num/--format-specifier are omitted.
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "en", "--substitution", "folders", "--plural", "other", "file_summary", "%arg folders"})
+	test.AssertNoError(t, err)
+
+	errOutput := captureStderr(func() {
+		captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 1)
+		})
+	})
+	if !strings.Contains(errOutput, "supply argNum and formatSpecifier") {
+		t.Errorf("expected an error requiring argNum/formatSpecifier, got: %q", errOutput)
+	}
+}
+
+func TestSetCommand_Execute_SubstitutionWithoutPluralRejected(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--substitution", "files", "file_summary", "x"})
+	test.AssertNoError(t, err)
+
+	errOutput := captureStderr(func() {
+		captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 2) // ExitUsageError
+		})
+	})
+	if !strings.Contains(errOutput, "--substitution requires --plural") {
+		t.Errorf("expected a missing --plural error, got: %q", errOutput)
+	}
+}
+
+func TestSetCommand_Execute_SubstitutionWithDeviceRejected(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--substitution", "files", "--plural", "other", "--device", "iphone", "file_summary", "x"})
+	test.AssertNoError(t, err)
+
+	errOutput := captureStderr(func() {
+		captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 2) // ExitUsageError
+		})
+	})
+	if !strings.Contains(errOutput, "--substitution does not support --device") {
+		t.Errorf("expected a device-unsupported error, got: %q", errOutput)
+	}
+}
+
+func TestSetCommand_Execute_ArgNumWithoutSubstitutionRejected(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--arg-num", "1", "file_summary", "x"})
+	test.AssertNoError(t, err)
+
+	errOutput := captureStderr(func() {
+		captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 2) // ExitUsageError
+		})
+	})
+	if !strings.Contains(errOutput, "--arg-num and --format-specifier require --substitution") {
+		t.Errorf("expected an error tying --arg-num to --substitution, got: %q", errOutput)
+	}
+}
+
+func TestSetCommand_Execute_SubstitutionJSONOutputPath(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--substitution", "files", "--plural", "one", "--json", "file_summary", "%arg件"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed setJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v for output: %q", err, output)
+	}
+	if len(parsed.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(parsed.Results))
+	}
+	test.AssertEqual(t, parsed.Results[0].Path, "substitutions.files.plural.one")
+	test.AssertEqual(t, parsed.Results[0].Action, "updated")
+}
+
+func TestSetCommand_Execute_StdinSubstitutionExisting(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin"})
+	test.AssertNoError(t, err)
+
+	stdinContent := `{"key": "file_summary", "lang": "ja", "value": "%arg件のファイル", "plural": "one", "substitution": "files"}
+`
+
+	var output string
+	withStdin(t, stdinContent, func() {
+		output = captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 0)
+		})
+	})
+	if !strings.Contains(output, "Summary: 0 created, 1 updated") {
+		t.Errorf("expected a plain update since 'files' already existed for ja, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	sub := xc.Strings["file_summary"].Localizations["ja"].Substitutions["files"]
+	test.AssertEqual(t, sub.Variations.Plural["one"].StringUnit.Value, "%arg件のファイル")
+}
+
+func TestSetCommand_Execute_StdinSubstitutionCreateRequiresArgNumAndFormatSpecifier(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	beforeBytes, err := os.ReadFile(filePath)
+	test.AssertNoError(t, err)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err = flagSet.Parse([]string{"-f", filePath, "--stdin"})
+	test.AssertNoError(t, err)
+
+	// "folders" is undefined everywhere and the row omits argNum/formatSpecifier.
+	stdinContent := `{"key": "file_summary", "lang": "en", "value": "%arg folders", "plural": "other", "substitution": "folders"}
+`
+
+	var status subcommands.ExitStatus
+	var errOutput string
+	withStdin(t, stdinContent, func() {
+		errOutput = captureStderr(func() {
+			captureOutput(func() {
+				status = cmd.Execute(context.Background(), flagSet)
+			})
+		})
+	})
+	test.AssertEqual(t, int(status), 1) // ExitFailure (validation passes; the xcstrings write fails)
+	if !strings.Contains(errOutput, "supply argNum and formatSpecifier") {
+		t.Errorf("expected an error requiring argNum/formatSpecifier, got: %q", errOutput)
+	}
+
+	afterBytes, err := os.ReadFile(filePath)
+	test.AssertNoError(t, err)
+	if string(beforeBytes) != string(afterBytes) {
+		t.Error("file should not have been modified when the write fails")
+	}
+}
+
+func TestSetCommand_Execute_StdinSubstitutionCreatesBrandNewDefinition(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	// Point "en"'s host string at %#@folders@ first (via the same batch, on an earlier line).
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin"})
+	test.AssertNoError(t, err)
+
+	stdinContent := `{"key": "file_summary", "lang": "en", "value": "%#@folders@ found in %#@files@"}
+{"key": "file_summary", "lang": "en", "value": "%arg folder", "plural": "one", "substitution": "folders", "argNum": 2, "formatSpecifier": "lld"}
+{"key": "file_summary", "lang": "en", "value": "%arg folders", "plural": "other", "substitution": "folders", "argNum": 2, "formatSpecifier": "lld"}
+`
+
+	var output string
+	withStdin(t, stdinContent, func() {
+		output = captureOutput(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 0)
+		})
+	})
+	// Line 1 updates the (already-existing) host string, line 2 creates the
+	// "folders" substitution for en, line 3 adds its "other" leaf as a
+	// second update to the now-existing substitution.
+	if !strings.Contains(output, "Summary: 1 created, 2 updated") {
+		t.Errorf("expected one substitution-created row plus two plain updates, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	sub, ok := xc.Strings["file_summary"].Localizations["en"].Substitutions["folders"]
+	if !ok {
+		t.Fatal("expected 'folders' substitution to be created for en")
+	}
+	test.AssertEqual(t, sub.ArgNum, 2)
+	test.AssertEqual(t, sub.FormatSpecifier, "lld")
+	test.AssertEqual(t, sub.Variations.Plural["one"].StringUnit.Value, "%arg folder")
+	test.AssertEqual(t, sub.Variations.Plural["other"].StringUnit.Value, "%arg folders")
+}
+
+func TestSetCommand_Execute_StdinSubstitutionWithoutPluralRejected(t *testing.T) {
+	filePath := test.TempFile(t, "test.xcstrings", substitutionTestFixture())
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin"})
+	test.AssertNoError(t, err)
+
+	stdinContent := `{"key": "file_summary", "lang": "ja", "value": "x", "substitution": "files"}
+`
+
+	var status subcommands.ExitStatus
+	var errOutput string
+	withStdin(t, stdinContent, func() {
+		errOutput = captureStderr(func() {
+			captureOutput(func() {
+				status = cmd.Execute(context.Background(), flagSet)
+			})
+		})
+	})
+	test.AssertEqual(t, int(status), 2) // ExitUsageError
+	if !strings.Contains(errOutput, "line 1") || !strings.Contains(errOutput, "--substitution requires --plural") {
+		t.Errorf("expected line-1 --plural error, got: %q", errOutput)
+	}
+}

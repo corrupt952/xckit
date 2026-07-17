@@ -11,7 +11,7 @@ CLI tool for managing Xcode String Catalogs (.xcstrings).
 - Set translations with plural/device variation support (`--plural`, `--device` flags)
 - Translation progress tracking with key-level and string-unit-level counting
 - CSV export/import for spreadsheet-based translation workflows
-- Full support for plural, device, nested, and substitution variations
+- Full support for plural, device, nested, and substitution variations (read and write)
 - `needs_review` and `stale` state recognition
 - Stale key management (list, remove, dry-run)
 - Atomic file writes for data safety
@@ -109,7 +109,7 @@ Shows keys that need translation. Without `--lang`, returns keys with any untran
 ### set
 
 ```bash
-xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--comment <text>] [--force] [--allow-new-language] [--require-existing] [--dry-run] [--json] <key> <value>
+xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--comment <text>] [--substitution <name> [--arg-num <n>] [--format-specifier <spec>]] [--force] [--allow-new-language] [--require-existing] [--dry-run] [--json] <key> <value>
 xckit set [-f file.xcstrings] --stdin [--force] [--allow-new-language] [--require-existing] [--dry-run] [--json]
 ```
 
@@ -119,6 +119,10 @@ Sets a translation for the given key/language. The key is created when it does n
 - `--device`: Set a device variation (`iphone`, `ipad`, `mac`, `appletv`, `applewatch`, `applevision`, `other`)
 - `--state`: `extractionState` applied only when the key is created (e.g. `manual`). Ignored when the key already exists.
 - `--comment`: Set or update the key's translator-facing comment (visible in Xcode and in `export`'s CSV `comment` column). Pass an empty string (`--comment ""`) to clear an existing comment. The comment is a property of the key itself (not per-language), so it is applied together with the value in the same call; it cannot be combined with `--stdin` — use the NDJSON `comment` field instead. Omitting `--comment` entirely leaves any existing comment untouched, including when only the value is being updated.
+- `--substitution <name>`: Write `<value>` into `substitutions.<name>.variations.plural.<category>` instead of the top-level translation. Requires `--plural`; `--device` is not supported in combination with `--substitution`. The key must already exist (set its host string with a plain `set` call first).
+  - If `<name>` already exists for `--lang`, the value is written directly and `--arg-num`/`--format-specifier` are ignored.
+  - If `<name>` doesn't exist for `--lang` but exists for another language of the same key, its `argNum`/`formatSpecifier` are copied so the new substitution stays structurally consistent — `--arg-num`/`--format-specifier` are not needed.
+  - If `<name>` doesn't exist for any language of the key, `--arg-num` and `--format-specifier` are both required, and the key's host string for `--lang` must already contain a `%#@<name>@` reference — otherwise Xcode would never resolve the substitution and `lint`'s `substitution-structure` rule would flag it.
 - `--force`: Suppress the migration warning when converting a plain string to variations
 - `--allow-new-language`: Allow adding a language that is not yet present in the catalog
 - `--require-existing`: Fail instead of silently creating a new key (protects against typoed keys creating an unintended new entry)
@@ -126,6 +130,23 @@ Sets a translation for the given key/language. The key is created when it does n
 - `--json`: Print a structured JSON document instead of human-readable text (combinable with `--dry-run`)
 
 Plural and device flags can be combined to set nested variations (e.g., device > plural).
+
+**Writing a substitution (e.g. Russian plural forms):** substitutions let a single host string route one argument through its own plural/device variations (`%#@name@` in the host text, resolved via `substitutions.<name>`). This is needed for languages like Russian whose plural system has more categories (`one`/`few`/`many`/`other`) than the source language typically needs. Example — adding Russian pluralization to a key whose English host string already routes its first argument through the `arg1` substitution:
+
+```bash
+# 1. Set the Russian host string, referencing the same %#@arg1@ substitution as the source
+xckit set -f Localizable.xcstrings --lang ru "error.reminder.bulk.failed" "%#@arg1@ из %2\$d действий не выполнено."
+
+# 2. Fill in each Russian plural category for the "arg1" substitution.
+#    Since "arg1" already exists (for "en"), argNum/formatSpecifier are copied automatically.
+xckit set -f Localizable.xcstrings --lang ru --substitution arg1 --plural one   "error.reminder.bulk.failed" "%arg действие"
+xckit set -f Localizable.xcstrings --lang ru --substitution arg1 --plural few   "error.reminder.bulk.failed" "%arg действия"
+xckit set -f Localizable.xcstrings --lang ru --substitution arg1 --plural many  "error.reminder.bulk.failed" "%arg действий"
+xckit set -f Localizable.xcstrings --lang ru --substitution arg1 --plural other "error.reminder.bulk.failed" "%arg действия"
+
+# 3. Confirm the result is structurally valid
+xckit lint -f Localizable.xcstrings
+```
 
 **Migrating a plain string to variations:** setting the first `--plural` or `--device` variation on a key that currently holds a plain translation moves the existing value into the `other` fallback slot (for combined plural+device, `device: other` > `plural: other`), preserving its translation state. Explicitly targeting `other` in the same call overrides the preserved value. Appending further categories to an already-variation key leaves existing values untouched.
 
@@ -136,12 +157,13 @@ Plural and device flags can be combined to set nested variations (e.g., device >
 **Batch input (`--stdin`):** reads newline-delimited JSON (NDJSON) from stdin, one object per line, and applies every line in a single process run with a single atomic write. This is the efficient way to script many translations at once (e.g. many keys x many languages) instead of spawning `set` once per key/language pair. `--stdin` cannot be combined with the positional `<key> <value>` arguments, and `--lang`/`--plural`/`--device`/`--state` are taken per line instead of as flags. Each line's schema is:
 
 ```json
-{"key": "greeting", "lang": "ja", "value": "こんにちは", "plural": "other", "device": "iphone", "state": "manual", "comment": "Shown on the login screen"}
+{"key": "greeting", "lang": "ja", "value": "こんにちは", "plural": "other", "device": "iphone", "state": "manual", "comment": "Shown on the login screen", "substitution": "arg1", "argNum": 1, "formatSpecifier": "lld"}
 ```
 
 - `key`, `lang`, `value`: required
 - `plural`, `device`, `state`: optional, same meaning as the equivalent single-`set` flags
 - `comment`: optional, same meaning as `--comment`. Omitting the field leaves the key's existing comment untouched; an explicit `"comment": ""` clears it.
+- `substitution`, `argNum`, `formatSpecifier`: optional, same meaning as `--substitution`/`--arg-num`/`--format-specifier`. `substitution` requires `plural` and rejects `device`; `argNum`/`formatSpecifier` are only meaningful together with `substitution` and are only required when creating a substitution that doesn't yet exist for any language of the key.
 
 Example:
 
@@ -150,6 +172,7 @@ printf '%s\n' \
   '{"key": "greeting", "lang": "ja", "value": "こんにちは"}' \
   '{"key": "greeting", "lang": "fr", "value": "Bonjour"}' \
   '{"key": "item_count", "lang": "ja", "value": "%lldつのアイテム", "plural": "other"}' \
+  '{"key": "error.reminder.bulk.failed", "lang": "ru", "value": "%arg действие", "plural": "one", "substitution": "arg1"}' \
   | xckit set -f Localizable.xcstrings --stdin
 ```
 
@@ -161,13 +184,14 @@ All lines are parsed and validated (including language validation) before anythi
 {
   "results": [
     {"key": "greeting", "lang": "ja", "action": "created", "commentAction": "set"},
-    {"key": "item_count", "lang": "ja", "action": "updated", "path": "plural.other"}
+    {"key": "item_count", "lang": "ja", "action": "updated", "path": "plural.other"},
+    {"key": "error.reminder.bulk.failed", "lang": "ru", "action": "created", "path": "substitutions.arg1.plural.one"}
   ],
-  "summary": {"created": 1, "updated": 1}
+  "summary": {"created": 2, "updated": 1}
 }
 ```
 
-`action` is `created` when the key itself was newly added to the catalog, and `updated` when an existing key gained or changed a localization. `path` is present only for plural/device variations and describes where within the variation structure the value was written (e.g. `plural.other`, `device.iphone`, `device.iphone.plural.one`); it is omitted for plain string translations. `commentAction` is present only when the call changed the key's comment: `set` when a non-empty comment was written, `cleared` when an empty comment removed an existing one; it is omitted when the comment was left untouched.
+`action` is `created` when the key itself was newly added to the catalog (plain or plural/device translations), or when a named substitution was newly defined for that language (substitution translations — the key itself always already existed in this case, since `--substitution` never creates a key); it is `updated` otherwise. `path` is present for plural/device variations (e.g. `plural.other`, `device.iphone`, `device.iphone.plural.one`) and for substitution variations (e.g. `substitutions.arg1.plural.one`); it is omitted for plain string translations. `commentAction` is present only when the call changed the key's comment: `set` when a non-empty comment was written, `cleared` when an empty comment removed an existing one; it is omitted when the comment was left untouched.
 
 ### remove
 

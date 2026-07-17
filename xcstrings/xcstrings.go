@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"xckit/helper/atomicwrite"
@@ -466,6 +467,148 @@ func (x *XCStrings) SetVariationTranslation(key, language, value string, opts Va
 	definition.Localizations[language] = loc
 	x.Strings[key] = definition
 	return migrated, created, nil
+}
+
+// HostText returns the concatenated text that makes up a localization's
+// "host" string: its plain stringUnit value, or every leaf value across its
+// top-level plural/device Variations. Substitution values are excluded --
+// this is the text a substitution's %#@name@ reference is expected to appear
+// in, and a substitution's own values can never satisfy that reference.
+func (l *Localization) HostText() string {
+	var b strings.Builder
+	if l.StringUnit != nil {
+		b.WriteString(l.StringUnit.Value)
+		b.WriteByte('\n')
+	}
+	if l.Variations != nil {
+		for _, u := range l.Variations.allStringUnits() {
+			b.WriteString(u.Value)
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+// setVariationLeaf writes unit into v at the plural and/or device slot
+// described by opts, creating intermediate maps as needed. Mirrors the
+// plural/device branching in SetVariationTranslation, but operates on an
+// arbitrary *Variations (e.g. a substitution's) rather than a localization's
+// top-level one, and performs no plain-stringUnit migration.
+func setVariationLeaf(v *Variations, opts VariationOptions, unit *StringUnit) {
+	switch {
+	case opts.Plural != "" && opts.Device != "":
+		if v.Device == nil {
+			v.Device = make(map[string]*VariationValue)
+		}
+		dv := v.Device[opts.Device]
+		if dv == nil {
+			dv = &VariationValue{}
+		}
+		if dv.Variations == nil {
+			dv.Variations = &Variations{}
+		}
+		if dv.Variations.Plural == nil {
+			dv.Variations.Plural = make(map[PluralCategory]*VariationValue)
+		}
+		dv.Variations.Plural[opts.Plural] = &VariationValue{StringUnit: unit}
+		v.Device[opts.Device] = dv
+	case opts.Plural != "":
+		if v.Plural == nil {
+			v.Plural = make(map[PluralCategory]*VariationValue)
+		}
+		v.Plural[opts.Plural] = &VariationValue{StringUnit: unit}
+	case opts.Device != "":
+		if v.Device == nil {
+			v.Device = make(map[string]*VariationValue)
+		}
+		v.Device[opts.Device] = &VariationValue{StringUnit: unit}
+	}
+}
+
+// HostReferencesSubstitution reports whether host contains a reference to the
+// named substitution, in either the plain (%#@name@) or positional
+// (%1$#@name@) form.
+func HostReferencesSubstitution(host, subName string) bool {
+	re := regexp.MustCompile(`%(\d+\$)?#@` + regexp.QuoteMeta(subName) + `@`)
+	return re.MatchString(host)
+}
+
+// findSubstitutionTemplate searches the other localizations of def for a
+// substitution named subName, so its argNum/formatSpecifier can be copied
+// when creating the substitution for a language that doesn't have it yet.
+func findSubstitutionTemplate(def StringDefinition, excludeLang, subName string) (Substitution, bool) {
+	for lang, loc := range def.Localizations {
+		if lang == excludeLang {
+			continue
+		}
+		if sub, ok := loc.Substitutions[subName]; ok {
+			return sub, true
+		}
+	}
+	return Substitution{}, false
+}
+
+// SetSubstitutionTranslation sets a translation within a substitution's
+// plural and/or device variation (as described by opts) for the given key
+// and language. The key must already exist; this method never creates one.
+//
+// The catalog only records a substitution's argNum/formatSpecifier once, on
+// the Substitution struct itself, so when the key+language does not already
+// define subName, it is resolved as follows:
+//   - if another language of the same key defines subName, its
+//     argNum/formatSpecifier are copied so the new substitution stays
+//     structurally consistent across languages (argNum and formatSpecifier
+//     arguments are ignored in this case);
+//   - otherwise argNum and formatSpecifier must both be supplied by the
+//     caller (argNum > 0, formatSpecifier non-empty), and the language's
+//     HostText must already contain a %#@subName@ reference -- without one,
+//     Xcode would never resolve the substitution and the catalog would fail
+//     lint's substitution-structure rule.
+//
+// It returns (created, err) where created indicates that a new Substitution
+// entry was added for this key+language (either copied or freshly defined),
+// as opposed to an existing one being updated in place.
+func (x *XCStrings) SetSubstitutionTranslation(key, language, subName, value string, opts VariationOptions, argNum int, formatSpecifier string) (bool, error) {
+	definition, exists := x.Strings[key]
+	if !exists {
+		return false, fmt.Errorf("key %q does not exist; set the host string first", key)
+	}
+	if opts.Plural == "" && opts.Device == "" {
+		return false, fmt.Errorf("substitution %q requires a plural or device variation to be specified", subName)
+	}
+
+	if definition.Localizations == nil {
+		definition.Localizations = make(map[string]Localization)
+	}
+	loc := definition.Localizations[language]
+	if loc.Substitutions == nil {
+		loc.Substitutions = make(map[string]Substitution)
+	}
+
+	sub, subExists := loc.Substitutions[subName]
+	created := false
+	if !subExists {
+		if template, found := findSubstitutionTemplate(definition, language, subName); found {
+			sub = Substitution{ArgNum: template.ArgNum, FormatSpecifier: template.FormatSpecifier}
+		} else {
+			if argNum <= 0 || strings.TrimSpace(formatSpecifier) == "" {
+				return false, fmt.Errorf("substitution %q is not defined for key %q in any language; supply argNum and formatSpecifier to create it", subName, key)
+			}
+			if !HostReferencesSubstitution(loc.HostText(), subName) {
+				return false, fmt.Errorf("key %q language %q host string does not reference %%#@%s@; set the host string first", key, language, subName)
+			}
+			sub = Substitution{ArgNum: argNum, FormatSpecifier: formatSpecifier}
+		}
+		created = true
+	}
+
+	unit := &StringUnit{State: "translated", Value: value}
+	setVariationLeaf(&sub.Variations, opts, unit)
+
+	loc.Substitutions[subName] = sub
+	definition.Localizations[language] = loc
+	x.Strings[key] = definition
+	return created, nil
 }
 
 // KeysWithAnyUntranslated returns keys that have at least one untranslated language.

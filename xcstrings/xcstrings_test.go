@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"xckit/helper/test"
@@ -1670,4 +1671,179 @@ func TestXCStrings_SetVariationTranslation_SeedsOtherOnNestedMigration(t *testin
 	}
 	test.AssertEqual(t, otherPlural.StringUnit.State, "translated")
 	test.AssertEqual(t, otherPlural.StringUnit.Value, "アイテム")
+}
+
+// newSubstitutionFixture returns a catalog with one key whose "en"
+// localization defines the "files" substitution (argNum 1, formatSpecifier
+// "lld", plural other), and whose "ru" localization has only a host string
+// referencing %#@files@ with no substitution defined yet.
+func newSubstitutionFixture() *XCStrings {
+	return &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"file_summary": {
+				Localizations: map[string]Localization{
+					"en": {
+						StringUnit: &StringUnit{State: "translated", Value: "%#@files@ found"},
+						Substitutions: map[string]Substitution{
+							"files": {
+								ArgNum:          1,
+								FormatSpecifier: "lld",
+								Variations: Variations{
+									Plural: map[PluralCategory]*VariationValue{
+										"other": {StringUnit: &StringUnit{State: "translated", Value: "%arg files"}},
+									},
+								},
+							},
+						},
+					},
+					"ru": {
+						StringUnit: &StringUnit{State: "translated", Value: "%#@files@ найдено"},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestXCStrings_SetSubstitutionTranslation_WritesExistingSubstitutionDirectly(t *testing.T) {
+	xc := newSubstitutionFixture()
+
+	created, err := xc.SetSubstitutionTranslation("file_summary", "en", "files", "%arg file", VariationOptions{Plural: "one"}, 0, "")
+	test.AssertNoError(t, err)
+	if created {
+		t.Error("expected created=false: the substitution already existed for en")
+	}
+
+	sub := xc.Strings["file_summary"].Localizations["en"].Substitutions["files"]
+	test.AssertEqual(t, sub.ArgNum, 1)
+	test.AssertEqual(t, sub.FormatSpecifier, "lld")
+	test.AssertEqual(t, sub.Variations.Plural["one"].StringUnit.Value, "%arg file")
+	// The pre-existing "other" leaf must be untouched.
+	test.AssertEqual(t, sub.Variations.Plural["other"].StringUnit.Value, "%arg files")
+}
+
+func TestXCStrings_SetSubstitutionTranslation_CopiesDefinitionFromOtherLanguage(t *testing.T) {
+	xc := newSubstitutionFixture()
+
+	created, err := xc.SetSubstitutionTranslation("file_summary", "ru", "files", "%arg файл", VariationOptions{Plural: "one"}, 0, "")
+	test.AssertNoError(t, err)
+	if !created {
+		t.Error("expected created=true: 'files' is new for ru")
+	}
+
+	sub, ok := xc.Strings["file_summary"].Localizations["ru"].Substitutions["files"]
+	if !ok {
+		t.Fatal("expected 'files' substitution to be created for ru")
+	}
+	test.AssertEqual(t, sub.ArgNum, 1)
+	test.AssertEqual(t, sub.FormatSpecifier, "lld")
+	test.AssertEqual(t, sub.Variations.Plural["one"].StringUnit.Value, "%arg файл")
+}
+
+func TestXCStrings_SetSubstitutionTranslation_CreatesBrandNewDefinitionWhenReferenced(t *testing.T) {
+	xc := newSubstitutionFixture()
+	// Point ru's host string at %#@count@ before creating the substitution.
+	_, err := xc.SetTranslation("file_summary", "ru", "%#@count@ найдено", "")
+	test.AssertNoError(t, err)
+
+	created, err := xc.SetSubstitutionTranslation("file_summary", "ru", "count", "%arg", VariationOptions{Plural: "other"}, 3, "lld")
+	test.AssertNoError(t, err)
+	if !created {
+		t.Error("expected created=true: 'count' is new everywhere")
+	}
+
+	sub, ok := xc.Strings["file_summary"].Localizations["ru"].Substitutions["count"]
+	if !ok {
+		t.Fatal("expected 'count' substitution to be created for ru")
+	}
+	test.AssertEqual(t, sub.ArgNum, 3)
+	test.AssertEqual(t, sub.FormatSpecifier, "lld")
+	test.AssertEqual(t, sub.Variations.Plural["other"].StringUnit.Value, "%arg")
+}
+
+func TestXCStrings_SetSubstitutionTranslation_CreatesBrandNewWithPositionalHostReference(t *testing.T) {
+	xc := newSubstitutionFixture()
+	// Xcode emits positional references (%1$#@name@) for multi-argument keys.
+	_, err := xc.SetTranslation("file_summary", "ru", "%1$#@count@ найдено", "")
+	test.AssertNoError(t, err)
+
+	created, err := xc.SetSubstitutionTranslation("file_summary", "ru", "count", "%arg", VariationOptions{Plural: "other"}, 1, "lld")
+	test.AssertNoError(t, err)
+	if !created {
+		t.Error("expected created=true: 'count' is new everywhere")
+	}
+	sub, ok := xc.Strings["file_summary"].Localizations["ru"].Substitutions["count"]
+	if !ok {
+		t.Fatal("expected 'count' substitution to be created for ru")
+	}
+	test.AssertEqual(t, sub.ArgNum, 1)
+}
+
+func TestXCStrings_SetSubstitutionTranslation_RejectsBrandNewWithoutArgNumOrFormatSpecifier(t *testing.T) {
+	xc := newSubstitutionFixture()
+
+	_, err := xc.SetSubstitutionTranslation("file_summary", "ru", "count", "%arg", VariationOptions{Plural: "other"}, 0, "")
+	if err == nil {
+		t.Fatal("expected an error: 'count' is undefined everywhere and argNum/formatSpecifier were omitted")
+	}
+	if _, ok := xc.Strings["file_summary"].Localizations["ru"].Substitutions["count"]; ok {
+		t.Error("expected no broken 'count' substitution to have been created")
+	}
+}
+
+func TestXCStrings_SetSubstitutionTranslation_RejectsBrandNewWithoutHostReference(t *testing.T) {
+	xc := newSubstitutionFixture()
+
+	// ru's host string (still "%#@files@ найдено") never references %#@count@.
+	_, err := xc.SetSubstitutionTranslation("file_summary", "ru", "count", "%arg", VariationOptions{Plural: "other"}, 3, "lld")
+	if err == nil {
+		t.Fatal("expected an error: ru's host string does not reference %#@count@")
+	}
+	if _, ok := xc.Strings["file_summary"].Localizations["ru"].Substitutions["count"]; ok {
+		t.Error("expected no broken 'count' substitution to have been created")
+	}
+}
+
+func TestXCStrings_SetSubstitutionTranslation_RejectsMissingKey(t *testing.T) {
+	xc := newSubstitutionFixture()
+
+	_, err := xc.SetSubstitutionTranslation("does_not_exist", "en", "files", "%arg", VariationOptions{Plural: "other"}, 0, "")
+	if err == nil {
+		t.Fatal("expected an error for a key that does not exist")
+	}
+}
+
+func TestXCStrings_SetSubstitutionTranslation_RequiresPluralOrDevice(t *testing.T) {
+	xc := newSubstitutionFixture()
+
+	_, err := xc.SetSubstitutionTranslation("file_summary", "en", "files", "%arg", VariationOptions{}, 0, "")
+	if err == nil {
+		t.Fatal("expected an error when neither Plural nor Device is set")
+	}
+}
+
+func TestLocalization_HostText(t *testing.T) {
+	loc := Localization{
+		StringUnit: &StringUnit{State: "translated", Value: "%#@files@ found"},
+		Substitutions: map[string]Substitution{
+			"files": {
+				ArgNum:          1,
+				FormatSpecifier: "lld",
+				Variations: Variations{
+					Plural: map[PluralCategory]*VariationValue{
+						"other": {StringUnit: &StringUnit{State: "translated", Value: "should not appear in host text"}},
+					},
+				},
+			},
+		},
+	}
+
+	text := loc.HostText()
+	if !strings.Contains(text, "%#@files@ found") {
+		t.Errorf("expected host text to include the stringUnit value, got: %q", text)
+	}
+	if strings.Contains(text, "should not appear in host text") {
+		t.Errorf("expected host text to exclude substitution values, got: %q", text)
+	}
 }
