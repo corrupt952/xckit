@@ -23,7 +23,7 @@ test:
 	@go test -v ./...
 
 lint:
-	@go list | xargs golint
+	@golangci-lint run
 
 clean:
 	@rm -f xckit

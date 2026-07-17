@@ -1,0 +1,27 @@
+version: "2"
+
+linters:
+  default: standard
+
+  exclusions:
+    rules:
+      # errcheck: existing code ignores errors from best-effort cleanup calls
+      # (Close / os.Remove after already-successful operations) and from
+      # writes to flag.CommandLine.Output() / os.Stdout in CLI/test helper
+      # paths. These are pre-existing patterns across the codebase; kept
+      # excluded for now and tracked for a follow-up cleanup.
+      - linters:
+          - errcheck
+        text: "Error return value of `(fmt\\.Fprint|fmt\\.Fprintf|.*\\.Close|os\\.WriteFile|os\\.Chdir|os\\.Remove|.*\\.ReadFrom|io\\.Copy)` is not checked"
+
+      # staticcheck S1002/QF1007: existing simplification suggestions in
+      # xcstrings/xcstrings.go and command/status.go. Kept excluded for now
+      # and tracked for a follow-up cleanup.
+      - linters:
+          - staticcheck
+        text: "^(S1002|QF1007):"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
