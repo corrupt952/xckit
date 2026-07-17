@@ -95,7 +95,7 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 		}
 		created = wasCreated
 		if migrated && !c.force {
-			fmt.Fprintf(os.Stderr, "Warning: existing plain stringUnit for key '%s' in language '%s' was migrated to variations\n", key, c.language)
+			fmt.Fprintf(os.Stderr, "Warning: existing plain stringUnit for key '%s' in language '%s' was migrated to variations; the original value was preserved under the 'other' fallback\n", key, c.language)
 		}
 	} else {
 		wasCreated, err := xcs.SetTranslation(key, c.language, value, c.state)

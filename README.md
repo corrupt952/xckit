@@ -121,6 +121,10 @@ Sets a translation for the given key/language. The key is created when it does n
 
 Plural and device flags can be combined to set nested variations (e.g., device > plural).
 
+**Migrating a plain string to variations:** setting the first `--plural` or `--device` variation on a key that currently holds a plain translation moves the existing value into the `other` fallback slot (for combined plural+device, `device: other` > `plural: other`), preserving its translation state. Explicitly targeting `other` in the same call overrides the preserved value. Appending further categories to an already-variation key leaves existing values untouched.
+
+**Format specifiers (`%d` vs `%lld`):** Swift string interpolation of an `Int` (e.g. `"\(count) items"`) generates `%lld` in the catalog. When adding plural variations manually, match the specifier your code actually generates — usually `%lld` for `Int` interpolation — otherwise the catalog entry won't line up with what Xcode extracts.
+
 **Language validation:** `--lang` must match a language already present in the catalog (any language used in a key's `localizations`, or the catalog's `sourceLanguage`) unless `--allow-new-language` is passed. This prevents typos (e.g. `--lang jp`) or case mismatches (e.g. `--lang JA` instead of `ja`) from silently creating a bogus new language column. When a match is unrecognized, the error suggests the closest existing language code (`did you mean "ja"?`) when one can be inferred. If the catalog has no languages yet (a brand-new catalog), the first `set` call is never blocked, so seeding the very first translation doesn't require `--allow-new-language`.
 
 ### remove
