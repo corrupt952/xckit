@@ -212,6 +212,18 @@ It covers the full workflow: inspect keys, set translations including plural and
 
 ## Development
 
+### Environment setup (Nix)
+
+A [Nix flake](flake.nix) provides Go, gopls, gotools, golangci-lint, and goreleaser.
+
+```bash
+# With direnv (recommended)
+direnv allow
+
+# Without direnv
+nix develop
+```
+
 ### Running tests
 
 ```bash
