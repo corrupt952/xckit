@@ -1,0 +1,162 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empty key value"
+          }
+        }
+      }
+    },
+    "Complete %d Reminders": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete %d Reminders"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リマインダーを完了"
+          }
+        },
+        "JA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リマインダーを完了2"
+          }
+        }
+      }
+    },
+    "Multi\nline warning": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First line\nSecond line"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1行目\n2行目"
+          }
+        }
+      }
+    },
+    "%lld reordered items": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld reordered item"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld個の並べ替え済み項目"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld files in %lld folders (broken sub)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@files@ in some folders"
+          },
+          "substitutions": {
+            "files": {
+              "argNum": 0,
+              "formatSpecifier": "",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg file"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "jp_typo_key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typo language"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイポ言語1"
+          }
+        }
+      }
+    },
+    "jp_typo_key2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typo language 2"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイポ言語2"
+          }
+        }
+      }
+    },
+    "jp_typo_key3": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typo language 3"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイポ言語3"
+          }
+        },
+        "jp": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "誤った言語コード"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
