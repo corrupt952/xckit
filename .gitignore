@@ -49,3 +49,6 @@ go.work
 
 # Nix / direnv
 .direnv/
+
+# GoReleaser
+dist/

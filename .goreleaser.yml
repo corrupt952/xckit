@@ -1,0 +1,9 @@
+# https://goreleaser.com
+version: 2
+
+builds:
+  # Everything except ldflags follows GoReleaser defaults so the platform
+  # matrix and archive layout stay identical to previous releases. The
+  # default ldflags stamp main.version, but xckit keeps its version in
+  # xckit/command.Version, so released binaries used to report "dev".
+  - ldflags: -s -w -X "xckit/command.Version={{.Version}}"
