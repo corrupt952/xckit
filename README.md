@@ -31,6 +31,18 @@ go install github.com/corrupt952/xckit@latest
 
 Download a prebuilt binary from the [Releases](https://github.com/corrupt952/xckit/releases) page.
 
+### Nix
+
+```bash
+# Run without installing
+nix run github:corrupt952/xckit -- --help
+
+# Install into your profile
+nix profile install github:corrupt952/xckit
+```
+
+Builds from source on the current main; `xckit version` reports the commit hash it was built from.
+
 ### Build from source
 
 ```bash
