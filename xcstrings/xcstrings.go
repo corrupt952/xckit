@@ -228,7 +228,7 @@ func (x *XCStrings) UntranslatedKeys(language string) []string {
 		if definition.ExtractionState == "stale" {
 			continue
 		}
-		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
+		if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
 			continue
 		}
 		localization, exists := definition.Localizations[language]
@@ -375,12 +375,8 @@ func (x *XCStrings) SetVariationTranslation(key, language, value string, opts Va
 		return false, false, fmt.Errorf("key %q language %q has substitutions; setting plural/device variations for keys with substitutions is not supported here -- use CSV export/import or Xcode instead", key, language)
 	}
 
-	migrated := false
-
 	// Check if we need to migrate from plain stringUnit to variations
-	if loc.StringUnit != nil && loc.Variations == nil {
-		migrated = true
-	}
+	migrated := loc.StringUnit != nil && loc.Variations == nil
 
 	// Ensure variations structure exists
 	if loc.Variations == nil {
@@ -623,7 +619,7 @@ func (x *XCStrings) KeysWithAnyUntranslated() []string {
 		if definition.ExtractionState == "stale" {
 			continue
 		}
-		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
+		if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
 			continue
 		}
 		hasUntranslated := false
@@ -722,7 +718,7 @@ func (x *XCStrings) UntranslatedDetailsForLanguage(language string) []Untranslat
 		if definition.ExtractionState == "stale" {
 			continue
 		}
-		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
+		if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
 			continue
 		}
 		localization, exists := definition.Localizations[language]
@@ -744,7 +740,7 @@ func (x *XCStrings) UntranslatedDetailsForAllLanguages() []UntranslatedDetail {
 		if definition.ExtractionState == "stale" {
 			continue
 		}
-		if definition.ShouldTranslate != nil && *definition.ShouldTranslate == false {
+		if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
 			continue
 		}
 		for _, lang := range languages {

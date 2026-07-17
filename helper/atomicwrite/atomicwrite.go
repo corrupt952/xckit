@@ -17,21 +17,21 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 	tmpPath := tmp.Name()
 	defer func() {
 		// Clean up temp file on error; after successful rename this is a no-op.
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 	}()
 
 	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("failed to set file permissions: %w", err)
 	}
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("failed to sync temp file: %w", err)
 	}
 

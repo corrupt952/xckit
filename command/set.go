@@ -106,36 +106,36 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 
 	if c.stdin {
 		if commentSet {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: --comment cannot be combined with --stdin; use the \"comment\" field in NDJSON rows instead\n")
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: --comment cannot be combined with --stdin; use the \"comment\" field in NDJSON rows instead\n")
 			return subcommands.ExitUsageError
 		}
 		return c.executeStdin(f)
 	}
 
 	if c.language == "" {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: --lang flag is required\n")
-		fmt.Fprint(flag.CommandLine.Output(), c.Usage())
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: --lang flag is required\n")
+		_, _ = fmt.Fprint(flag.CommandLine.Output(), c.Usage())
 		return subcommands.ExitUsageError
 	}
 
 	if f.NArg() < 2 {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: key and value arguments are required\n")
-		fmt.Fprint(flag.CommandLine.Output(), c.Usage())
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: key and value arguments are required\n")
+		_, _ = fmt.Fprint(flag.CommandLine.Output(), c.Usage())
 		return subcommands.ExitUsageError
 	}
 
 	if c.plural != "" && !slices.Contains(xcstrings.ValidPluralCategories, c.plural) {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: invalid plural category '%s' (valid: zero, one, two, few, many, other)\n", c.plural)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: invalid plural category '%s' (valid: zero, one, two, few, many, other)\n", c.plural)
 		return subcommands.ExitUsageError
 	}
 
 	if c.device != "" && !slices.Contains(xcstrings.ValidDeviceCategories, c.device) {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: invalid device '%s' (valid: iphone, ipad, mac, appletv, applewatch, applevision, other)\n", c.device)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: invalid device '%s' (valid: iphone, ipad, mac, appletv, applewatch, applevision, other)\n", c.device)
 		return subcommands.ExitUsageError
 	}
 
 	if err := validateSubstitutionFlags(c.substitution, c.plural, c.device, c.argNum, c.formatSpecifier); err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitUsageError
 	}
 
@@ -144,18 +144,18 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 
 	xcs, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
 	if err := c.validateLanguage(xcs); err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitUsageError
 	}
 
 	if c.requireExisting {
 		if _, exists := xcs.Strings[key]; !exists {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: key '%s' does not exist (--require-existing)\n", key)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: key '%s' does not exist (--require-existing)\n", key)
 			return subcommands.ExitUsageError
 		}
 	}
@@ -167,7 +167,7 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 
 	result, migrated, err := applySetTranslation(xcs, key, c.language, value, c.plural, c.device, c.state, comment, c.substitution, c.argNum, c.formatSpecifier)
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 	if migrated && !c.force {
@@ -181,7 +181,7 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 
 	if !c.dryRun {
 		if err := xcs.SaveToFile(filePath); err != nil {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error saving file: %v\n", err)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error saving file: %v\n", err)
 			return subcommands.ExitFailure
 		}
 	}
@@ -193,7 +193,7 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 		}
 		data, err := json.MarshalIndent(out, "", "  ")
 		if err != nil {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 			return subcommands.ExitFailure
 		}
 		fmt.Println(string(data))
@@ -232,20 +232,20 @@ type stdinRowEntry struct {
 
 func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 	if f.NArg() > 0 {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: --stdin cannot be combined with positional <key> <value> arguments\n")
-		fmt.Fprint(flag.CommandLine.Output(), c.Usage())
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: --stdin cannot be combined with positional <key> <value> arguments\n")
+		_, _ = fmt.Fprint(flag.CommandLine.Output(), c.Usage())
 		return subcommands.ExitUsageError
 	}
 
 	entries, parseErrs := parseStdinRows(os.Stdin)
 	if len(entries) == 0 && len(parseErrs) == 0 {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: no input lines received on stdin\n")
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: no input lines received on stdin\n")
 		return subcommands.ExitUsageError
 	}
 
 	xcs, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
@@ -311,7 +311,7 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 
 	if len(validationErrs) > 0 {
 		for _, e := range validationErrs {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: %s\n", e)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %s\n", e)
 		}
 		return subcommands.ExitUsageError
 	}
@@ -321,7 +321,7 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 		row := entry.row
 		result, migrated, err := applySetTranslation(xcs, row.Key, row.Lang, row.Value, row.Plural, row.Device, row.State, row.Comment, row.Substitution, row.ArgNum, row.FormatSpecifier)
 		if err != nil {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: line %d: %v\n", entry.line, err)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: line %d: %v\n", entry.line, err)
 			return subcommands.ExitFailure
 		}
 		if migrated && !c.force {
@@ -337,7 +337,7 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 
 	if !c.dryRun {
 		if err := xcs.SaveToFile(filePath); err != nil {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error saving file: %v\n", err)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error saving file: %v\n", err)
 			return subcommands.ExitFailure
 		}
 	}
@@ -351,7 +351,7 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 		}
 		data, err := json.MarshalIndent(out, "", "  ")
 		if err != nil {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 			return subcommands.ExitFailure
 		}
 		fmt.Println(string(data))

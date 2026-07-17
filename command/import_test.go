@@ -930,7 +930,7 @@ func TestImportCommand_Execute_OutputFile(t *testing.T) {
 
 	xcPath := test.TempFile(t, "test.xcstrings", xcContent)
 	csvPath := filepath.Join(filepath.Dir(xcPath), "translations.csv")
-	os.WriteFile(csvPath, []byte(csvContent), 0644)
+	test.AssertNoError(t, os.WriteFile(csvPath, []byte(csvContent), 0644))
 
 	cmd := &ImportCommand{}
 	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)

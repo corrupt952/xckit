@@ -61,7 +61,7 @@ type lintIssue struct {
 func (c *LintCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	xcs, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
@@ -140,7 +140,7 @@ func (c *LintCommand) printJSON(issues []lintIssue) subcommands.ExitStatus {
 
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 	fmt.Println(string(data))

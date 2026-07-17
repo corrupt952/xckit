@@ -47,7 +47,7 @@ func (c *UntranslatedCommand) SetFlags(f *flag.FlagSet) {
 func (c *UntranslatedCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	xcs, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
@@ -163,7 +163,7 @@ func (c *UntranslatedCommand) executeJSON(xcs *xcstrings.XCStrings) subcommands.
 
 	data, err := json.MarshalIndent(untranslatedJSONOutput{Untranslated: items}, "", "  ")
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 	fmt.Println(string(data))

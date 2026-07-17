@@ -48,43 +48,43 @@ func (c *ImportCommand) SetFlags(f *flag.FlagSet) {
 
 func (c *ImportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	if c.format != "csv" {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: --format csv is required\n")
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: --format csv is required\n")
 		return subcommands.ExitFailure
 	}
 
 	if c.onMissingKey != "skip" && c.onMissingKey != "error" {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: --on-missing-key must be skip or error\n")
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: --on-missing-key must be skip or error\n")
 		return subcommands.ExitFailure
 	}
 
 	args := f.Args()
 	if len(args) < 1 {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: CSV file path is required\n")
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: CSV file path is required\n")
 		return subcommands.ExitFailure
 	}
 	csvPath := args[0]
 
 	xc, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
 	csvFile, err := os.Open(csvPath)
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
-	defer csvFile.Close()
+	defer func() { _ = csvFile.Close() }()
 
 	summary, err := importCSV(csvFile, xc, c.onMissingKey, c.clearEmpty)
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
 	if c.dryRun {
-		fmt.Fprintf(os.Stdout, "Dry run: %d created, %d updated, %d unchanged, %d cleared, %d skipped\n",
+		_, _ = fmt.Fprintf(os.Stdout, "Dry run: %d created, %d updated, %d unchanged, %d cleared, %d skipped\n",
 			summary.created, summary.updated, summary.unchanged, summary.cleared, summary.skipped)
 		return subcommands.ExitSuccess
 	}
@@ -98,21 +98,21 @@ func (c *ImportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 		if xcPath != "" {
 			data, err := os.ReadFile(xcPath)
 			if err != nil {
-				fmt.Fprintf(flag.CommandLine.Output(), "Error creating backup: %v\n", err)
+				_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error creating backup: %v\n", err)
 				return subcommands.ExitFailure
 			}
 			if err := atomicwrite.WriteFile(xcPath+".bak", data, 0644); err != nil {
-				fmt.Fprintf(flag.CommandLine.Output(), "Error creating backup: %v\n", err)
+				_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error creating backup: %v\n", err)
 				return subcommands.ExitFailure
 			}
 		}
 	}
 	if err := xc.SaveToFile(xcPath); err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
-	fmt.Fprintf(os.Stdout, "Imported: %d created, %d updated, %d unchanged, %d cleared, %d skipped\n",
+	_, _ = fmt.Fprintf(os.Stdout, "Imported: %d created, %d updated, %d unchanged, %d cleared, %d skipped\n",
 		summary.created, summary.updated, summary.unchanged, summary.cleared, summary.skipped)
 	return subcommands.ExitSuccess
 }

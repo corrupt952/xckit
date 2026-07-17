@@ -18,11 +18,11 @@ func captureOutput(fn func()) string {
 
 	fn()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	return buf.String()
 }
 

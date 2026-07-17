@@ -40,13 +40,13 @@ func (c *ExportCommand) SetFlags(f *flag.FlagSet) {
 
 func (c *ExportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	if c.format != "csv" {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: --format csv is required\n")
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: --format csv is required\n")
 		return subcommands.ExitFailure
 	}
 
 	xc, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
@@ -54,17 +54,17 @@ func (c *ExportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 	if c.output != "" {
 		file, err := os.Create(c.output)
 		if err != nil {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 			return subcommands.ExitFailure
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		w = file
 	} else {
 		w = os.Stdout
 	}
 
 	if err := writeCSV(w, xc); err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 

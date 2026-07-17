@@ -194,8 +194,14 @@ func TestStaleCommand_Execute_RemoveWithoutFlag(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	test.AssertNoError(t, err)
-	t.Cleanup(func() { os.Chdir(origDir) })
-	os.Chdir(tmpDir)
+	t.Cleanup(func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	})
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change working directory: %v", err)
+	}
 
 	cmd := &StaleCommand{}
 	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)

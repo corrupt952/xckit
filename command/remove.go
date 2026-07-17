@@ -36,14 +36,14 @@ func (c *RemoveCommand) SetFlags(f *flag.FlagSet) {
 func (c *RemoveCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	hasKey := f.NArg() >= 1
 	if !hasKey && c.state == "" {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: either <key> or --state is required\n")
-		fmt.Fprint(flag.CommandLine.Output(), c.Usage())
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: either <key> or --state is required\n")
+		_, _ = fmt.Fprint(flag.CommandLine.Output(), c.Usage())
 		return subcommands.ExitUsageError
 	}
 
 	xcs, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
@@ -51,11 +51,11 @@ func (c *RemoveCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 	if hasKey {
 		key := f.Arg(0)
 		if _, exists := xcs.Strings[key]; !exists {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: key '%s' not found\n", key)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: key '%s' not found\n", key)
 			return subcommands.ExitFailure
 		}
 		if c.state != "" && xcs.ExtractionStateOf(key) != c.state {
-			fmt.Fprintf(flag.CommandLine.Output(), "Error: key '%s' has extractionState '%s', not '%s'\n", key, xcs.ExtractionStateOf(key), c.state)
+			_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: key '%s' has extractionState '%s', not '%s'\n", key, xcs.ExtractionStateOf(key), c.state)
 			return subcommands.ExitFailure
 		}
 		targets = []string{key}
@@ -89,7 +89,7 @@ func (c *RemoveCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 		filePath = c.findXCStringsFile()
 	}
 	if err := xcs.SaveToFile(filePath); err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error saving file: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error saving file: %v\n", err)
 		return subcommands.ExitFailure
 	}
 

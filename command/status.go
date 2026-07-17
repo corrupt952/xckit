@@ -38,7 +38,7 @@ func (c *StatusCommand) SetFlags(f *flag.FlagSet) {
 func (c *StatusCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	xcstrings, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
@@ -106,7 +106,7 @@ func computeStatusLanguageStats(xcs *xcstringspkg.XCStrings, lang string, active
 	translatedUnits := 0
 	for _, key := range xcs.ActiveKeys() {
 		def := xcs.Strings[key]
-		if def.ShouldTranslate != nil && *def.ShouldTranslate == false {
+		if def.ShouldTranslate != nil && !*def.ShouldTranslate {
 			continue
 		}
 		loc, exists := def.Localizations[lang]
@@ -200,7 +200,7 @@ func (c *StatusCommand) printJSON(xcs *xcstringspkg.XCStrings, totalKeys, staleK
 
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 	fmt.Println(string(data))

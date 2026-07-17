@@ -42,7 +42,7 @@ func (c *ListCommand) SetFlags(f *flag.FlagSet) {
 func (c *ListCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	xcstrings, err := c.LoadXCStrings()
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
@@ -142,7 +142,7 @@ func (c *ListCommand) printJSON(xcs *xcstrings.XCStrings, keys []string) subcomm
 
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
-		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 	fmt.Println(string(data))
