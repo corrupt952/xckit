@@ -1,6 +1,7 @@
 package command
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"os"
@@ -91,8 +92,8 @@ func TestImportCommand_Execute_PluralVariations(t *testing.T) {
 		test.AssertEqual(t, int(status), 0)
 	})
 
-	if !strings.Contains(output, "2 updated") {
-		t.Errorf("expected 2 updated, got: %q", output)
+	if !strings.Contains(output, "2 created") {
+		t.Errorf("expected 2 created, got: %q", output)
 	}
 
 	xc, err := xcstrings.Load(xcPath)
@@ -142,8 +143,8 @@ func TestImportCommand_Execute_DeviceVariations(t *testing.T) {
 		test.AssertEqual(t, int(status), 0)
 	})
 
-	if !strings.Contains(output, "2 updated") {
-		t.Errorf("expected 2 updated, got: %q", output)
+	if !strings.Contains(output, "2 created") {
+		t.Errorf("expected 2 created, got: %q", output)
 	}
 
 	xc, err := xcstrings.Load(xcPath)
@@ -199,8 +200,8 @@ func TestImportCommand_Execute_NestedVariations(t *testing.T) {
 		test.AssertEqual(t, int(status), 0)
 	})
 
-	if !strings.Contains(output, "2 updated") {
-		t.Errorf("expected 2 updated, got: %q", output)
+	if !strings.Contains(output, "2 created") {
+		t.Errorf("expected 2 created, got: %q", output)
 	}
 
 	xc, err := xcstrings.Load(xcPath)
@@ -260,8 +261,8 @@ func TestImportCommand_Execute_Substitutions(t *testing.T) {
 		test.AssertEqual(t, int(status), 0)
 	})
 
-	if !strings.Contains(output, "2 updated") {
-		t.Errorf("expected 2 updated, got: %q", output)
+	if !strings.Contains(output, "2 created") {
+		t.Errorf("expected 2 created, got: %q", output)
 	}
 
 	xc, err := xcstrings.Load(xcPath)
@@ -350,8 +351,8 @@ func TestImportCommand_Execute_Backup(t *testing.T) {
 		test.AssertEqual(t, int(status), 0)
 	})
 
-	if !strings.Contains(output, "1 updated") {
-		t.Errorf("expected 1 updated, got: %q", output)
+	if !strings.Contains(output, "1 created") {
+		t.Errorf("expected 1 created, got: %q", output)
 	}
 
 	// Verify backup file exists with correct content
@@ -606,8 +607,8 @@ func TestImportCommand_Execute_SourceLanguageIgnored(t *testing.T) {
 
 func TestParseKeyBracket(t *testing.T) {
 	tests := []struct {
-		input     string
-		wantKey   string
+		input      string
+		wantKey    string
 		wantSuffix string
 	}{
 		{"greeting", "greeting", ""},
@@ -688,6 +689,102 @@ func TestParseHeader(t *testing.T) {
 	test.AssertEqual(t, cols[1].lang, "ja")
 	test.AssertEqual(t, cols[1].stateIdx, 5)
 	test.AssertEqual(t, cols[1].valueIdx, 6)
+}
+
+func TestImportCSV_RoundTrip_NoEditsAreAllUnchanged(t *testing.T) {
+	xcContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			},
+			"item_count": {
+				"localizations": {
+					"en": {
+						"variations": {
+							"plural": {
+								"one": {"stringUnit": {"state": "translated", "value": "%lld item"}},
+								"other": {"stringUnit": {"state": "translated", "value": "%lld items"}}
+							}
+						}
+					},
+					"ja": {
+						"variations": {
+							"plural": {
+								"one": {"stringUnit": {"state": "translated", "value": "%lld個のアイテム"}},
+								"other": {"stringUnit": {"state": "translated", "value": "%lld個のアイテム"}}
+							}
+						}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	xcPath := test.TempFile(t, "test.xcstrings", xcContent)
+	xc, err := xcstrings.Load(xcPath)
+	test.AssertNoError(t, err)
+
+	var buf bytes.Buffer
+	err = writeCSV(&buf, xc)
+	test.AssertNoError(t, err)
+
+	summary, err := importCSV(&buf, xc, "skip", false)
+	test.AssertNoError(t, err)
+
+	test.AssertEqual(t, summary.created, 0)
+	test.AssertEqual(t, summary.updated, 0)
+	test.AssertEqual(t, summary.cleared, 0)
+	test.AssertEqual(t, summary.skipped, 0)
+	if summary.unchanged == 0 {
+		t.Error("expected re-importing an unedited export to report unchanged cells")
+	}
+}
+
+func TestImportCSV_PartialEdits_CountsUpdatedAndUnchangedSeparately(t *testing.T) {
+	xcContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			},
+			"farewell": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Bye"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "さようなら"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	// greeting's ja value is unchanged; farewell's ja value is edited.
+	csvContent := "key,comment,shouldTranslate,en:state,en,ja:state,ja\n" +
+		"greeting,,,translated,Hello,translated,こんにちは\n" +
+		"farewell,,,translated,Bye,translated,またね\n"
+
+	xcPath := test.TempFile(t, "test.xcstrings", xcContent)
+	xc, err := xcstrings.Load(xcPath)
+	test.AssertNoError(t, err)
+
+	summary, err := importCSV(strings.NewReader(csvContent), xc, "skip", false)
+	test.AssertNoError(t, err)
+
+	test.AssertEqual(t, summary.updated, 1)
+	test.AssertEqual(t, summary.unchanged, 1)
+	test.AssertEqual(t, summary.created, 0)
+	test.AssertEqual(t, summary.cleared, 0)
+	test.AssertEqual(t, summary.skipped, 0)
+
+	loc := xc.Strings["farewell"].Localizations["ja"]
+	test.AssertEqual(t, loc.StringUnit.Value, "またね")
 }
 
 func TestImportCommand_Execute_OutputFile(t *testing.T) {

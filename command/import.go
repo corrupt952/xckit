@@ -10,9 +10,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/google/subcommands"
 	"xckit/helper/atomicwrite"
 	"xckit/xcstrings"
+
+	"github.com/google/subcommands"
 )
 
 type ImportCommand struct {
@@ -83,7 +84,8 @@ func (c *ImportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 	}
 
 	if c.dryRun {
-		fmt.Fprintf(os.Stdout, "Dry run: %d updated, %d skipped, %d cleared\n", summary.updated, summary.skipped, summary.cleared)
+		fmt.Fprintf(os.Stdout, "Dry run: %d created, %d updated, %d unchanged, %d cleared, %d skipped\n",
+			summary.created, summary.updated, summary.unchanged, summary.cleared, summary.skipped)
 		return subcommands.ExitSuccess
 	}
 
@@ -110,14 +112,24 @@ func (c *ImportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 		return subcommands.ExitFailure
 	}
 
-	fmt.Fprintf(os.Stdout, "Imported: %d updated, %d skipped, %d cleared\n", summary.updated, summary.skipped, summary.cleared)
+	fmt.Fprintf(os.Stdout, "Imported: %d created, %d updated, %d unchanged, %d cleared, %d skipped\n",
+		summary.created, summary.updated, summary.unchanged, summary.cleared, summary.skipped)
 	return subcommands.ExitSuccess
 }
 
+// importSummary tallies the outcome of an import run:
+//   - created:   a translation was written where none existed for that lang/variation
+//   - updated:   an existing translation's value was changed
+//   - unchanged: the CSV value already matched the existing translation (no write performed),
+//     or the CSV cell was empty and there was nothing to clear
+//   - cleared:   an existing translation was removed via --clear-empty
+//   - skipped:   the row's key was missing (--on-missing-key skip) or the write failed
 type importSummary struct {
-	updated int
-	skipped int
-	cleared int
+	created   int
+	updated   int
+	unchanged int
+	cleared   int
+	skipped   int
 }
 
 // importCSV reads CSV data and applies translations to the xcstrings catalog.
@@ -170,12 +182,27 @@ func importCSV(r io.Reader, xc *xcstrings.XCStrings, onMissingKey string, clearE
 			}
 			value := record[lc.valueIdx]
 
+			existingValue, existing := currentTranslationValue(xc, baseKey, lc.lang, variationPath)
+
 			if value == "" {
-				if clearEmpty {
-					if err := clearTranslation(xc, baseKey, lc.lang, variationPath); err == nil {
-						summary.cleared++
-					}
+				// Nothing to clear: no existing translation, or it's already empty.
+				if !existing || existingValue == "" {
+					summary.unchanged++
+					continue
 				}
+				if !clearEmpty {
+					// A translation exists but --clear-empty wasn't requested: leave it untouched.
+					summary.unchanged++
+					continue
+				}
+				if err := clearTranslation(xc, baseKey, lc.lang, variationPath); err == nil {
+					summary.cleared++
+				}
+				continue
+			}
+
+			if existing && existingValue == value {
+				summary.unchanged++
 				continue
 			}
 
@@ -184,7 +211,11 @@ func importCSV(r io.Reader, xc *xcstrings.XCStrings, onMissingKey string, clearE
 				summary.skipped++
 				continue
 			}
-			summary.updated++
+			if existing {
+				summary.updated++
+			} else {
+				summary.created++
+			}
 		}
 	}
 
@@ -193,9 +224,9 @@ func importCSV(r io.Reader, xc *xcstrings.XCStrings, onMissingKey string, clearE
 
 // langColumn represents a language column pair in the CSV header.
 type langColumn struct {
-	lang      string
-	stateIdx  int // index of {lang}:state column
-	valueIdx  int // index of {lang} value column
+	lang     string
+	stateIdx int // index of {lang}:state column
+	valueIdx int // index of {lang} value column
 }
 
 // parseHeader parses the CSV header to find language columns.
@@ -239,6 +270,33 @@ func parseKeyBracket(raw string) (string, string) {
 		return raw, ""
 	}
 	return raw[:idx], raw[idx+1 : end]
+}
+
+// currentTranslationValue returns the existing translation value for a key/lang/variation
+// path in the catalog, and whether a translation is currently present at all. It reuses
+// resolveVariationUnit (defined in export.go) so lookup and CSV flattening stay in sync.
+func currentTranslationValue(xc *xcstrings.XCStrings, key, lang, variationPath string) (string, bool) {
+	def, exists := xc.Strings[key]
+	if !exists {
+		return "", false
+	}
+	loc, exists := def.Localizations[lang]
+	if !exists {
+		return "", false
+	}
+
+	if variationPath == "" {
+		if loc.StringUnit == nil {
+			return "", false
+		}
+		return loc.StringUnit.Value, true
+	}
+
+	unit := resolveVariationUnit(loc, variationPath)
+	if unit == nil {
+		return "", false
+	}
+	return unit.Value, true
 }
 
 // setTranslation sets a translation value, handling both simple and variation keys.
