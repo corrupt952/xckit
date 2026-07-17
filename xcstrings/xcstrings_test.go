@@ -400,7 +400,7 @@ func TestXCStrings_SetTranslation_ClearsVariations(t *testing.T) {
 					"ja": {
 						Variations: &Variations{
 							Plural: map[PluralCategory]*VariationValue{
-								"one": {StringUnit: &StringUnit{State: "translated", Value: "%lld アイテム"}},
+								"one":   {StringUnit: &StringUnit{State: "translated", Value: "%lld アイテム"}},
 								"other": {StringUnit: &StringUnit{State: "translated", Value: "%lld アイテム"}},
 							},
 						},

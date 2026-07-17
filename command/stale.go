@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/google/subcommands"
 	"xckit/formatter"
+
+	"github.com/google/subcommands"
 )
 
 type StaleCommand struct {

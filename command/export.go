@@ -9,8 +9,9 @@ import (
 	"os"
 	"sort"
 
-	"github.com/google/subcommands"
 	"xckit/xcstrings"
+
+	"github.com/google/subcommands"
 )
 
 type ExportCommand struct {

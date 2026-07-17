@@ -38,7 +38,7 @@ type VariationValue struct {
 // Variations represents device and/or plural variations for a localization.
 type Variations struct {
 	Plural map[PluralCategory]*VariationValue `json:"plural,omitempty"`
-	Device map[string]*VariationValue          `json:"device,omitempty"`
+	Device map[string]*VariationValue         `json:"device,omitempty"`
 }
 
 // Substitution represents a substitution within a localized string.
@@ -50,9 +50,9 @@ type Substitution struct {
 
 // Localization represents localization data for a specific language.
 type Localization struct {
-	StringUnit    *StringUnit              `json:"stringUnit,omitempty"`
-	Variations    *Variations              `json:"variations,omitempty"`
-	Substitutions map[string]Substitution  `json:"substitutions,omitempty"`
+	StringUnit    *StringUnit             `json:"stringUnit,omitempty"`
+	Variations    *Variations             `json:"variations,omitempty"`
+	Substitutions map[string]Substitution `json:"substitutions,omitempty"`
 }
 
 // StringUnit represents a string unit with translation state and value.
