@@ -108,7 +108,7 @@ Shows keys that need translation. Without `--lang`, returns keys with any untran
 ### set
 
 ```bash
-xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--force] [--allow-new-language] [--require-existing] [--dry-run] [--json] <key> <value>
+xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--comment <text>] [--force] [--allow-new-language] [--require-existing] [--dry-run] [--json] <key> <value>
 xckit set [-f file.xcstrings] --stdin [--force] [--allow-new-language] [--require-existing] [--dry-run] [--json]
 ```
 
@@ -117,6 +117,7 @@ Sets a translation for the given key/language. The key is created when it does n
 - `--plural`: Set a plural variation (`zero`, `one`, `two`, `few`, `many`, `other`)
 - `--device`: Set a device variation (`iphone`, `ipad`, `mac`, `appletv`, `applewatch`, `applevision`, `other`)
 - `--state`: `extractionState` applied only when the key is created (e.g. `manual`). Ignored when the key already exists.
+- `--comment`: Set or update the key's translator-facing comment (visible in Xcode and in `export`'s CSV `comment` column). Pass an empty string (`--comment ""`) to clear an existing comment. The comment is a property of the key itself (not per-language), so it is applied together with the value in the same call; it cannot be combined with `--stdin` — use the NDJSON `comment` field instead. Omitting `--comment` entirely leaves any existing comment untouched, including when only the value is being updated.
 - `--force`: Suppress the migration warning when converting a plain string to variations
 - `--allow-new-language`: Allow adding a language that is not yet present in the catalog
 - `--require-existing`: Fail instead of silently creating a new key (protects against typoed keys creating an unintended new entry)
@@ -134,11 +135,12 @@ Plural and device flags can be combined to set nested variations (e.g., device >
 **Batch input (`--stdin`):** reads newline-delimited JSON (NDJSON) from stdin, one object per line, and applies every line in a single process run with a single atomic write. This is the efficient way to script many translations at once (e.g. many keys x many languages) instead of spawning `set` once per key/language pair. `--stdin` cannot be combined with the positional `<key> <value>` arguments, and `--lang`/`--plural`/`--device`/`--state` are taken per line instead of as flags. Each line's schema is:
 
 ```json
-{"key": "greeting", "lang": "ja", "value": "こんにちは", "plural": "other", "device": "iphone", "state": "manual"}
+{"key": "greeting", "lang": "ja", "value": "こんにちは", "plural": "other", "device": "iphone", "state": "manual", "comment": "Shown on the login screen"}
 ```
 
 - `key`, `lang`, `value`: required
 - `plural`, `device`, `state`: optional, same meaning as the equivalent single-`set` flags
+- `comment`: optional, same meaning as `--comment`. Omitting the field leaves the key's existing comment untouched; an explicit `"comment": ""` clears it.
 
 Example:
 
@@ -157,14 +159,14 @@ All lines are parsed and validated (including language validation) before anythi
 ```json
 {
   "results": [
-    {"key": "greeting", "lang": "ja", "action": "created"},
+    {"key": "greeting", "lang": "ja", "action": "created", "commentAction": "set"},
     {"key": "item_count", "lang": "ja", "action": "updated", "path": "plural.other"}
   ],
   "summary": {"created": 1, "updated": 1}
 }
 ```
 
-`action` is `created` when the key itself was newly added to the catalog, and `updated` when an existing key gained or changed a localization. `path` is present only for plural/device variations and describes where within the variation structure the value was written (e.g. `plural.other`, `device.iphone`, `device.iphone.plural.one`); it is omitted for plain string translations.
+`action` is `created` when the key itself was newly added to the catalog, and `updated` when an existing key gained or changed a localization. `path` is present only for plural/device variations and describes where within the variation structure the value was written (e.g. `plural.other`, `device.iphone`, `device.iphone.plural.one`); it is omitted for plain string translations. `commentAction` is present only when the call changed the key's comment: `set` when a non-empty comment was written, `cleared` when an empty comment removed an existing one; it is omitted when the comment was left untouched.
 
 ### remove
 

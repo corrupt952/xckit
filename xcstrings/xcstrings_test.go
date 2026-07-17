@@ -345,6 +345,32 @@ func TestXCStrings_SetTranslation_DoesNotOverrideExistingState(t *testing.T) {
 	test.AssertEqual(t, x.Strings["keep.state"].ExtractionState, "manual")
 }
 
+func TestXCStrings_SetComment(t *testing.T) {
+	x := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"greeting": {Comment: "Old comment"},
+		},
+	}
+
+	err := x.SetComment("greeting", "New comment")
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, x.Strings["greeting"].Comment, "New comment")
+
+	err = x.SetComment("greeting", "")
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, x.Strings["greeting"].Comment, "")
+}
+
+func TestXCStrings_SetComment_MissingKey(t *testing.T) {
+	x := &XCStrings{SourceLanguage: "en", Strings: map[string]StringDefinition{}}
+
+	err := x.SetComment("missing", "Some comment")
+	if err == nil {
+		t.Fatal("expected an error for a missing key")
+	}
+}
+
 func TestXCStrings_RemoveKey(t *testing.T) {
 	x := &XCStrings{
 		SourceLanguage: "en",

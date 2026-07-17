@@ -21,6 +21,7 @@ type SetCommand struct {
 	plural           string
 	device           string
 	state            string
+	comment          string
 	force            bool
 	allowNewLanguage bool
 	stdin            bool
@@ -38,8 +39,9 @@ func (*SetCommand) Synopsis() string {
 }
 
 func (*SetCommand) Usage() string {
-	return "set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--force] [--require-existing] [--dry-run] [--json] <key> <value>: Set translation, creating the key if it does not yet exist\n" +
-		"set [-f file.xcstrings] --stdin [--allow-new-language] [--force] [--require-existing] [--dry-run] [--json]: Apply a batch of translations from NDJSON on stdin, one object per line: {\"key\", \"lang\", \"value\", \"plural\"?, \"device\"?, \"state\"?}\n"
+	return "set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--comment <text>] [--force] [--require-existing] [--dry-run] [--json] <key> <value>: Set translation, creating the key if it does not yet exist\n" +
+		"set [-f file.xcstrings] --stdin [--allow-new-language] [--force] [--require-existing] [--dry-run] [--json]: Apply a batch of translations from NDJSON on stdin, one object per line: {\"key\", \"lang\", \"value\", \"plural\"?, \"device\"?, \"state\"?, \"comment\"?}\n" +
+		"  --comment sets or updates the key's translator-facing comment (pass an empty string to clear it); it is applied together with the value and cannot be combined with --stdin. In NDJSON rows, an omitted \"comment\" field leaves the existing comment untouched, while an explicit \"comment\": \"\" clears it.\n"
 }
 
 func (c *SetCommand) SetFlags(f *flag.FlagSet) {
@@ -48,6 +50,7 @@ func (c *SetCommand) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&c.plural, "plural", "", "Plural category (zero, one, two, few, many, other)")
 	f.StringVar(&c.device, "device", "", "Device variation (iphone, ipad, mac, appletv, applewatch, applevision, other)")
 	f.StringVar(&c.state, "state", "", "extractionState applied when the key is newly created (e.g. manual). Ignored when the key already exists.")
+	f.StringVar(&c.comment, "comment", "", "Set or update the key's translator-facing comment; pass an empty string to clear it. Cannot be combined with --stdin (use the NDJSON \"comment\" field instead).")
 	f.BoolVar(&c.force, "force", false, "Suppress migration warning when converting plain stringUnit to variations")
 	f.BoolVar(&c.allowNewLanguage, "allow-new-language", false, "Allow adding a language that is not yet present in the catalog")
 	f.BoolVar(&c.stdin, "stdin", false, "Read NDJSON lines from stdin and apply them in a single batch instead of taking <key> <value> arguments")
@@ -58,18 +61,20 @@ func (c *SetCommand) SetFlags(f *flag.FlagSet) {
 
 // setResult describes the outcome of applying a single translation.
 type setResult struct {
-	Key    string
-	Lang   string
-	Action string // "created" or "updated"
-	Path   string // variation path (e.g. "plural.other", "device.iphone"), empty for a plain stringUnit
+	Key           string
+	Lang          string
+	Action        string // "created" or "updated"
+	Path          string // variation path (e.g. "plural.other", "device.iphone"), empty for a plain stringUnit
+	CommentAction string // "set", "cleared", or "" when the comment was left untouched
 }
 
 // setJSONResult is a single entry of `set --json` / `set --stdin --json` output.
 type setJSONResult struct {
-	Key    string `json:"key"`
-	Lang   string `json:"lang"`
-	Action string `json:"action"`
-	Path   string `json:"path,omitempty"`
+	Key           string `json:"key"`
+	Lang          string `json:"lang"`
+	Action        string `json:"action"`
+	Path          string `json:"path,omitempty"`
+	CommentAction string `json:"commentAction,omitempty"`
 }
 
 // setJSONSummary is the created/updated tally of `set --json` output.
@@ -85,7 +90,18 @@ type setJSONOutput struct {
 }
 
 func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	commentSet := false
+	f.Visit(func(fl *flag.Flag) {
+		if fl.Name == "comment" {
+			commentSet = true
+		}
+	})
+
 	if c.stdin {
+		if commentSet {
+			fmt.Fprintf(flag.CommandLine.Output(), "Error: --comment cannot be combined with --stdin; use the \"comment\" field in NDJSON rows instead\n")
+			return subcommands.ExitUsageError
+		}
 		return c.executeStdin(f)
 	}
 
@@ -132,7 +148,12 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 		}
 	}
 
-	result, migrated, err := applySetTranslation(xcs, key, c.language, value, c.plural, c.device, c.state)
+	var comment *string
+	if commentSet {
+		comment = &c.comment
+	}
+
+	result, migrated, err := applySetTranslation(xcs, key, c.language, value, c.plural, c.device, c.state, comment)
 	if err != nil {
 		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
@@ -155,7 +176,7 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 
 	if c.jsonOutput {
 		out := setJSONOutput{
-			Results: []setJSONResult{{Key: result.Key, Lang: result.Lang, Action: result.Action, Path: result.Path}},
+			Results: []setJSONResult{setJSONResult(result)},
 			Summary: summarizeSetResults([]setResult{result}),
 		}
 		data, err := json.MarshalIndent(out, "", "  ")
@@ -171,22 +192,26 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 	if c.dryRun {
 		prefix = "[dry-run] "
 	}
+	commentSuffix := commentActionSuffix(result.CommentAction)
 	if result.Action == "created" {
-		fmt.Printf("%sSuccessfully created key '%s' with translation for language '%s'\n", prefix, key, c.language)
+		fmt.Printf("%sSuccessfully created key '%s' with translation for language '%s'%s\n", prefix, key, c.language, commentSuffix)
 	} else {
-		fmt.Printf("%sSuccessfully set translation for key '%s' in language '%s'\n", prefix, key, c.language)
+		fmt.Printf("%sSuccessfully set translation for key '%s' in language '%s'%s\n", prefix, key, c.language, commentSuffix)
 	}
 	return subcommands.ExitSuccess
 }
 
 // setStdinRow is the NDJSON schema accepted by `set --stdin`, one object per line.
+// Comment is a pointer so that an omitted field (nil) can be distinguished
+// from an explicit empty string, which clears the key's existing comment.
 type setStdinRow struct {
-	Key    string `json:"key"`
-	Lang   string `json:"lang"`
-	Value  string `json:"value"`
-	Plural string `json:"plural,omitempty"`
-	Device string `json:"device,omitempty"`
-	State  string `json:"state,omitempty"`
+	Key     string  `json:"key"`
+	Lang    string  `json:"lang"`
+	Value   string  `json:"value"`
+	Plural  string  `json:"plural,omitempty"`
+	Device  string  `json:"device,omitempty"`
+	State   string  `json:"state,omitempty"`
+	Comment *string `json:"comment,omitempty"`
 }
 
 // stdinRowEntry pairs a parsed row with its 1-based line number for error reporting.
@@ -279,7 +304,7 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 	results := make([]setResult, 0, len(entries))
 	for _, entry := range entries {
 		row := entry.row
-		result, migrated, err := applySetTranslation(xcs, row.Key, row.Lang, row.Value, row.Plural, row.Device, row.State)
+		result, migrated, err := applySetTranslation(xcs, row.Key, row.Lang, row.Value, row.Plural, row.Device, row.State, row.Comment)
 		if err != nil {
 			fmt.Fprintf(flag.CommandLine.Output(), "Error: line %d: %v\n", entry.line, err)
 			return subcommands.ExitFailure
@@ -307,7 +332,7 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 	if c.jsonOutput {
 		out := setJSONOutput{Results: make([]setJSONResult, 0, len(results)), Summary: summary}
 		for _, r := range results {
-			out.Results = append(out.Results, setJSONResult{Key: r.Key, Lang: r.Lang, Action: r.Action, Path: r.Path})
+			out.Results = append(out.Results, setJSONResult(r))
 		}
 		data, err := json.MarshalIndent(out, "", "  ")
 		if err != nil {
@@ -323,10 +348,11 @@ func (c *SetCommand) executeStdin(f *flag.FlagSet) subcommands.ExitStatus {
 		prefix = "[dry-run] "
 	}
 	for _, r := range results {
+		commentSuffix := commentActionSuffix(r.CommentAction)
 		if r.Action == "created" {
-			fmt.Printf("%sSuccessfully created key '%s' with translation for language '%s'\n", prefix, r.Key, r.Lang)
+			fmt.Printf("%sSuccessfully created key '%s' with translation for language '%s'%s\n", prefix, r.Key, r.Lang, commentSuffix)
 		} else {
-			fmt.Printf("%sSuccessfully set translation for key '%s' in language '%s'\n", prefix, r.Key, r.Lang)
+			fmt.Printf("%sSuccessfully set translation for key '%s' in language '%s'%s\n", prefix, r.Key, r.Lang, commentSuffix)
 		}
 	}
 	fmt.Printf("%sSummary: %d created, %d updated\n", prefix, summary.Created, summary.Updated)
@@ -366,13 +392,19 @@ func parseStdinRows(r *os.File) ([]stdinRowEntry, []string) {
 
 // applySetTranslation applies a single key/lang/value translation (optionally
 // within a plural/device variation) to xcs, mirroring the plain-vs-variation
-// branching used by the single-shot `set` command. It returns the resulting
-// setResult, whether an existing plain stringUnit was migrated to variations,
-// and any error from the underlying xcstrings API.
-func applySetTranslation(xcs *xcstrings.XCStrings, key, lang, value, plural, device, state string) (setResult, bool, error) {
+// branching used by the single-shot `set` command. When comment is non-nil,
+// the key's translator-facing comment is also set to *comment (an empty
+// string clears it); comment == nil leaves any existing comment untouched.
+// It returns the resulting setResult, whether an existing plain stringUnit
+// was migrated to variations, and any error from the underlying xcstrings
+// API.
+func applySetTranslation(xcs *xcstrings.XCStrings, key, lang, value, plural, device, state string, comment *string) (setResult, bool, error) {
+	var result setResult
+	var migrated bool
+
 	if plural != "" || device != "" {
 		opts := xcstrings.VariationOptions{Plural: plural, Device: device}
-		migrated, created, err := xcs.SetVariationTranslation(key, lang, value, opts, state)
+		m, created, err := xcs.SetVariationTranslation(key, lang, value, opts, state)
 		if err != nil {
 			return setResult{}, false, err
 		}
@@ -380,18 +412,46 @@ func applySetTranslation(xcs *xcstrings.XCStrings, key, lang, value, plural, dev
 		if created {
 			action = "created"
 		}
-		return setResult{Key: key, Lang: lang, Action: action, Path: variationPath(plural, device)}, migrated, nil
+		result = setResult{Key: key, Lang: lang, Action: action, Path: variationPath(plural, device)}
+		migrated = m
+	} else {
+		created, err := xcs.SetTranslation(key, lang, value, state)
+		if err != nil {
+			return setResult{}, false, err
+		}
+		action := "updated"
+		if created {
+			action = "created"
+		}
+		result = setResult{Key: key, Lang: lang, Action: action}
 	}
 
-	created, err := xcs.SetTranslation(key, lang, value, state)
-	if err != nil {
-		return setResult{}, false, err
+	if comment != nil {
+		if err := xcs.SetComment(key, *comment); err != nil {
+			return setResult{}, false, err
+		}
+		if *comment == "" {
+			result.CommentAction = "cleared"
+		} else {
+			result.CommentAction = "set"
+		}
 	}
-	action := "updated"
-	if created {
-		action = "created"
+
+	return result, migrated, nil
+}
+
+// commentActionSuffix renders a short human-readable suffix describing a
+// comment change alongside the translation result, or "" when the comment
+// was left untouched.
+func commentActionSuffix(action string) string {
+	switch action {
+	case "set":
+		return " (comment set)"
+	case "cleared":
+		return " (comment cleared)"
+	default:
+		return ""
 	}
-	return setResult{Key: key, Lang: lang, Action: action}, false, nil
 }
 
 // variationPath renders a short, human-readable path describing where within

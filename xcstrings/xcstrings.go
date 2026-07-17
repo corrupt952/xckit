@@ -303,6 +303,19 @@ func (x *XCStrings) SetTranslation(key, language, value, initialState string) (b
 	return created, nil
 }
 
+// SetComment sets the translator-facing comment for the given key. Passing an
+// empty string clears an existing comment. Returns an error if the key does
+// not exist.
+func (x *XCStrings) SetComment(key, comment string) error {
+	definition, exists := x.Strings[key]
+	if !exists {
+		return fmt.Errorf("key '%s' does not exist", key)
+	}
+	definition.Comment = comment
+	x.Strings[key] = definition
+	return nil
+}
+
 // RemoveKey deletes the given key from the catalog regardless of its
 // extractionState. Returns true when the key was present and removed.
 func (x *XCStrings) RemoveKey(key string) bool {

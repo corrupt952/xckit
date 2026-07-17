@@ -40,7 +40,7 @@ func withStdin(t *testing.T, content string, fn func()) {
 	test.AssertNoError(t, err)
 
 	go func() {
-		w.WriteString(content)
+		_, _ = w.WriteString(content)
 		w.Close()
 	}()
 
@@ -1153,4 +1153,279 @@ func TestSetCommand_Execute_StdinNewLanguagePropagatesWithinBatch(t *testing.T) 
 	test.AssertNoError(t, err)
 	test.AssertEqual(t, xc.Strings["greeting"].Localizations["fr"].StringUnit.Value, "Bonjour")
 	test.AssertEqual(t, xc.Strings["farewell"].Localizations["fr"].StringUnit.Value, "Au revoir")
+}
+
+func TestSetCommand_Execute_CommentSetOnNewKey(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--comment", "Shown on the login button", "new_key", "テスト"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	if !strings.Contains(output, "comment set") {
+		t.Errorf("output should mention the comment was set, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["new_key"].Comment, "Shown on the login button")
+}
+
+func TestSetCommand_Execute_CommentUpdatedOnExistingKey(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"comment": "Old comment",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--comment", "New comment", "greeting", "こんにちは"})
+	test.AssertNoError(t, err)
+
+	captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["greeting"].Comment, "New comment")
+}
+
+func TestSetCommand_Execute_CommentClearedWithEmptyString(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"comment": "Old comment",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--comment", "", "greeting", "こんにちは"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	if !strings.Contains(output, "comment cleared") {
+		t.Errorf("output should mention the comment was cleared, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["greeting"].Comment, "")
+}
+
+func TestSetCommand_Execute_CommentUnspecifiedPreservesExisting(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"comment": "Preserve me",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "greeting", "こんにちは"})
+	test.AssertNoError(t, err)
+
+	captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["greeting"].Comment, "Preserve me")
+}
+
+func TestSetCommand_Execute_CommentWithStdinRejected(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin", "--comment", "not allowed"})
+	test.AssertNoError(t, err)
+
+	status := cmd.Execute(context.Background(), flagSet)
+	test.AssertEqual(t, int(status), 2) // ExitUsageError
+}
+
+func TestSetCommand_Execute_StdinCommentSetUpdateClearPreserve(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"comment": "Old greeting comment",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}}
+				}
+			},
+			"untouched": {
+				"comment": "Should stay",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Untouched"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin", "--allow-new-language"})
+	test.AssertNoError(t, err)
+
+	// "greeting" gets its comment updated, "farewell" is created with a new
+	// comment, and "untouched" is updated without a "comment" field so its
+	// existing comment must be preserved.
+	stdinContent := `{"key": "greeting", "lang": "ja", "value": "こんにちは", "comment": "Updated greeting comment"}
+{"key": "farewell", "lang": "ja", "value": "さようなら", "comment": "New farewell comment"}
+{"key": "untouched", "lang": "ja", "value": "そのまま"}
+`
+
+	var status subcommands.ExitStatus
+	withStdin(t, stdinContent, func() {
+		captureOutput(func() {
+			status = cmd.Execute(context.Background(), flagSet)
+		})
+	})
+	test.AssertEqual(t, int(status), 0)
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["greeting"].Comment, "Updated greeting comment")
+	test.AssertEqual(t, xc.Strings["farewell"].Comment, "New farewell comment")
+	test.AssertEqual(t, xc.Strings["untouched"].Comment, "Should stay")
+}
+
+func TestSetCommand_Execute_StdinCommentClearedWithEmptyString(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"comment": "Old comment",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--stdin", "--allow-new-language"})
+	test.AssertNoError(t, err)
+
+	stdinContent := `{"key": "greeting", "lang": "ja", "value": "こんにちは", "comment": ""}
+`
+
+	var status subcommands.ExitStatus
+	withStdin(t, stdinContent, func() {
+		captureOutput(func() {
+			status = cmd.Execute(context.Background(), flagSet)
+		})
+	})
+	test.AssertEqual(t, int(status), 0)
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["greeting"].Comment, "")
+}
+
+func TestSetCommand_Execute_JSONOutput_CommentAction(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"greeting": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--json", "--comment", "A note for translators", "greeting", "こんにちは"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed setJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v for output: %q", err, output)
+	}
+
+	if len(parsed.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(parsed.Results))
+	}
+	test.AssertEqual(t, parsed.Results[0].CommentAction, "set")
 }
