@@ -108,7 +108,7 @@ Shows keys that need translation. Without `--lang`, returns keys with any untran
 ### set
 
 ```bash
-xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--force] <key> <value>
+xckit set [-f file.xcstrings] --lang <language> [--plural <category>] [--device <device>] [--state <state>] [--force] [--allow-new-language] <key> <value>
 ```
 
 Sets a translation for the given key/language. The key is created when it does not yet exist; existing keys are updated in place.
@@ -117,8 +117,11 @@ Sets a translation for the given key/language. The key is created when it does n
 - `--device`: Set a device variation (`iphone`, `ipad`, `mac`, `appletv`, `applewatch`, `applevision`, `other`)
 - `--state`: `extractionState` applied only when the key is created (e.g. `manual`). Ignored when the key already exists.
 - `--force`: Suppress the migration warning when converting a plain string to variations
+- `--allow-new-language`: Allow adding a language that is not yet present in the catalog
 
 Plural and device flags can be combined to set nested variations (e.g., device > plural).
+
+**Language validation:** `--lang` must match a language already present in the catalog (any language used in a key's `localizations`, or the catalog's `sourceLanguage`) unless `--allow-new-language` is passed. This prevents typos (e.g. `--lang jp`) or case mismatches (e.g. `--lang JA` instead of `ja`) from silently creating a bogus new language column. When a match is unrecognized, the error suggests the closest existing language code (`did you mean "ja"?`) when one can be inferred. If the catalog has no languages yet (a brand-new catalog), the first `set` call is never blocked, so seeding the very first translation doesn't require `--allow-new-language`.
 
 ### remove
 

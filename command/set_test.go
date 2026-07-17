@@ -482,6 +482,179 @@ func TestSetCommand_Execute_NoMigrationWarningForNewLocalization(t *testing.T) {
 	}
 }
 
+func TestSetCommand_Execute_UnknownLanguageRejected(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"test_key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Test"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "テスト"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "jp", "test_key", "value"})
+	test.AssertNoError(t, err)
+
+	var errOutput string
+	captureOutput(func() {
+		errOutput = captureStderr(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 2) // ExitUsageError
+		})
+	})
+
+	if !strings.Contains(errOutput, `did you mean "ja"?`) {
+		t.Errorf("error should suggest 'ja' for typo 'jp', got: %q", errOutput)
+	}
+
+	// Verify the catalog was not modified
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	if _, exists := xc.Strings["test_key"].Localizations["jp"]; exists {
+		t.Error("unknown language 'jp' should not have been added to the catalog")
+	}
+}
+
+func TestSetCommand_Execute_CaseMismatchLanguageSuggestsCorrectCode(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"test_key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Test"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "テスト"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.SetOutput(&strings.Builder{})
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "JA", "test_key", "value"})
+	test.AssertNoError(t, err)
+
+	var errOutput string
+	captureOutput(func() {
+		errOutput = captureStderr(func() {
+			status := cmd.Execute(context.Background(), flagSet)
+			test.AssertEqual(t, int(status), 2) // ExitUsageError
+		})
+	})
+
+	if !strings.Contains(errOutput, `did you mean "ja"?`) {
+		t.Errorf("error should suggest 'ja' for case mismatch 'JA', got: %q", errOutput)
+	}
+}
+
+func TestSetCommand_Execute_AllowNewLanguageFlagPermitsAddition(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"test_key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Test"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "テスト"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "fr", "--allow-new-language", "test_key", "Valeur"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	if !strings.Contains(output, "Successfully set translation") {
+		t.Errorf("output should contain success message, got: %q", output)
+	}
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	loc, exists := xc.Strings["test_key"].Localizations["fr"]
+	if !exists {
+		t.Fatal("new language 'fr' should have been added with --allow-new-language")
+	}
+	test.AssertEqual(t, loc.StringUnit.Value, "Valeur")
+}
+
+func TestSetCommand_Execute_ExistingLanguageSucceedsWithoutFlag(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"test_key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Test"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "テスト"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "test_key", "更新"})
+	test.AssertNoError(t, err)
+
+	status := cmd.Execute(context.Background(), flagSet)
+	test.AssertEqual(t, int(status), 0)
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["test_key"].Localizations["ja"].StringUnit.Value, "更新")
+}
+
+func TestSetCommand_Execute_EmptyCatalogAllowsFirstLanguageWithoutFlag(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &SetCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	// No non-source languages exist yet, so adding "ja" should not require --allow-new-language.
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "first_key", "初めて"})
+	test.AssertNoError(t, err)
+
+	status := cmd.Execute(context.Background(), flagSet)
+	test.AssertEqual(t, int(status), 0)
+
+	xc, err := xcstrings.Load(filePath)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, xc.Strings["first_key"].Localizations["ja"].StringUnit.Value, "初めて")
+}
+
 func TestSetCommand_Execute_MultipleDeviceVariations(t *testing.T) {
 	testContent := `{
 		"sourceLanguage": "en",

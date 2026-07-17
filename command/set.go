@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"xckit/xcstrings"
 
@@ -14,11 +15,12 @@ import (
 
 type SetCommand struct {
 	XCStringsCommand
-	language string
-	plural   string
-	device   string
-	state    string
-	force    bool
+	language         string
+	plural           string
+	device           string
+	state            string
+	force            bool
+	allowNewLanguage bool
 }
 
 func (*SetCommand) Name() string {
@@ -40,6 +42,7 @@ func (c *SetCommand) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&c.device, "device", "", "Device variation (iphone, ipad, mac, appletv, applewatch, applevision, other)")
 	f.StringVar(&c.state, "state", "", "extractionState applied when the key is newly created (e.g. manual). Ignored when the key already exists.")
 	f.BoolVar(&c.force, "force", false, "Suppress migration warning when converting plain stringUnit to variations")
+	f.BoolVar(&c.allowNewLanguage, "allow-new-language", false, "Allow adding a language that is not yet present in the catalog")
 }
 
 func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
@@ -72,6 +75,11 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 	if err != nil {
 		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
+	}
+
+	if err := c.validateLanguage(xcs); err != nil {
+		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		return subcommands.ExitUsageError
 	}
 
 	created := false
@@ -114,4 +122,94 @@ func (c *SetCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 		fmt.Printf("Successfully set translation for key '%s' in language '%s'\n", key, c.language)
 	}
 	return subcommands.ExitSuccess
+}
+
+// validateLanguage ensures c.language refers to a language already present in
+// the catalog (or the catalog's source language), unless the catalog has no
+// languages yet (nothing to compare against, so the first language addition
+// is never blocked) or --allow-new-language was explicitly passed.
+func (c *SetCommand) validateLanguage(xcs *xcstrings.XCStrings) error {
+	existing := xcs.Languages()
+	if len(existing) == 0 {
+		// Nothing to validate against yet; do not block initial catalog setup.
+		return nil
+	}
+
+	candidates := append(existing, xcs.SourceLanguage)
+	if slices.Contains(candidates, c.language) {
+		return nil
+	}
+
+	if c.allowNewLanguage {
+		return nil
+	}
+
+	if suggestion := caseInsensitiveLanguageMatch(c.language, candidates); suggestion != "" {
+		return fmt.Errorf("unknown language '%s' (did you mean %q?). Use --allow-new-language to add a new language", c.language, suggestion)
+	}
+
+	if suggestion := nearestLanguageMatch(c.language, candidates); suggestion != "" {
+		return fmt.Errorf("unknown language '%s' (did you mean %q?). Use --allow-new-language to add a new language", c.language, suggestion)
+	}
+
+	return fmt.Errorf("unknown language '%s' is not present in the catalog. Use --allow-new-language to add a new language", c.language)
+}
+
+// caseInsensitiveLanguageMatch returns the candidate that matches input
+// case-insensitively (e.g. "JA" matching existing "ja"), or "" if none.
+func caseInsensitiveLanguageMatch(input string, candidates []string) string {
+	for _, candidate := range candidates {
+		if candidate != input && strings.EqualFold(candidate, input) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// nearestLanguageMatch returns the candidate closest to input by simple edit
+// distance, useful for catching typos like "jp" -> "ja". Returns "" if no
+// candidate is close enough to be a plausible suggestion.
+func nearestLanguageMatch(input string, candidates []string) string {
+	lowerInput := strings.ToLower(input)
+	best := ""
+	bestDistance := -1
+	for _, candidate := range candidates {
+		lowerCandidate := strings.ToLower(candidate)
+		distance := levenshteinDistance(lowerInput, lowerCandidate)
+		threshold := 1
+		if len(lowerInput) > 3 {
+			threshold = 2
+		}
+		if distance <= threshold && (bestDistance == -1 || distance < bestDistance) {
+			bestDistance = distance
+			best = candidate
+		}
+	}
+	return best
+}
+
+// levenshteinDistance computes the classic edit distance between two strings.
+func levenshteinDistance(a, b string) int {
+	ar := []rune(a)
+	br := []rune(b)
+
+	prev := make([]int, len(br)+1)
+	curr := make([]int, len(br)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+
+	for i := 1; i <= len(ar); i++ {
+		curr[0] = i
+		for j := 1; j <= len(br); j++ {
+			cost := 1
+			if ar[i-1] == br[j-1] {
+				cost = 0
+			}
+			curr[j] = min(prev[j]+1, min(curr[j-1]+1, prev[j-1]+cost))
+		}
+		prev, curr = curr, prev
+	}
+
+	return prev[len(br)]
 }
