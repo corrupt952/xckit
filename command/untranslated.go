@@ -2,21 +2,25 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"sort"
 	"strings"
 
-	"github.com/google/subcommands"
 	"xckit/formatter"
 	"xckit/xcstrings"
+
+	"github.com/google/subcommands"
 )
 
 type UntranslatedCommand struct {
 	XCStringsCommand
-	language string
-	prefix   string
-	detail   bool
+	language   string
+	prefix     string
+	detail     bool
+	jsonOutput bool
+	failIfAny  bool
 }
 
 func (*UntranslatedCommand) Name() string {
@@ -28,7 +32,7 @@ func (*UntranslatedCommand) Synopsis() string {
 }
 
 func (*UntranslatedCommand) Usage() string {
-	return "untranslated [-f file.xcstrings] [--lang <language>] [--prefix <prefix>]: List untranslated keys with translation status\n"
+	return "untranslated [-f file.xcstrings] [--lang <language>] [--prefix <prefix>] [--detail] [--json] [--fail-if-any]: List untranslated keys with translation status\n"
 }
 
 func (c *UntranslatedCommand) SetFlags(f *flag.FlagSet) {
@@ -36,6 +40,8 @@ func (c *UntranslatedCommand) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&c.language, "lang", "", "Target language code (e.g., ja, fr, de) - optional")
 	f.StringVar(&c.prefix, "prefix", "", "Filter keys by prefix")
 	f.BoolVar(&c.detail, "detail", false, "Show per-variation-path untranslated details")
+	f.BoolVar(&c.jsonOutput, "json", false, "Output a single JSON document to stdout instead of human-readable text")
+	f.BoolVar(&c.failIfAny, "fail-if-any", false, "Exit with status 1 if any untranslated string is found")
 }
 
 func (c *UntranslatedCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
@@ -43,6 +49,10 @@ func (c *UntranslatedCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...i
 	if err != nil {
 		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
 		return subcommands.ExitFailure
+	}
+
+	if c.jsonOutput {
+		return c.executeJSON(xcs)
 	}
 
 	if c.detail {
@@ -83,10 +93,21 @@ func (c *UntranslatedCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...i
 	}
 
 	formatter.DisplayKeyDetails(xcs, untranslatedKeys)
+	return c.exitStatus(len(untranslatedKeys) > 0)
+}
+
+// exitStatus returns ExitFailure when hasUntranslated is true and --fail-if-any
+// was requested, otherwise ExitSuccess.
+func (c *UntranslatedCommand) exitStatus(hasUntranslated bool) subcommands.ExitStatus {
+	if c.failIfAny && hasUntranslated {
+		return subcommands.ExitFailure
+	}
 	return subcommands.ExitSuccess
 }
 
-func (c *UntranslatedCommand) executeDetail(xcs *xcstrings.XCStrings) subcommands.ExitStatus {
+// collectFilteredDetails returns per-language, per-variation-path untranslated
+// details, filtered by --prefix and sorted by key, then language, then path.
+func (c *UntranslatedCommand) collectFilteredDetails(xcs *xcstrings.XCStrings) []xcstrings.UntranslatedDetail {
 	var details []xcstrings.UntranslatedDetail
 	if c.language != "" {
 		details = xcs.UntranslatedDetailsForLanguage(c.language)
@@ -94,7 +115,6 @@ func (c *UntranslatedCommand) executeDetail(xcs *xcstrings.XCStrings) subcommand
 		details = xcs.UntranslatedDetailsForAllLanguages()
 	}
 
-	// Filter by prefix
 	if c.prefix != "" {
 		var filtered []xcstrings.UntranslatedDetail
 		for _, d := range details {
@@ -104,6 +124,54 @@ func (c *UntranslatedCommand) executeDetail(xcs *xcstrings.XCStrings) subcommand
 		}
 		details = filtered
 	}
+
+	sort.Slice(details, func(i, j int) bool {
+		if details[i].Key != details[j].Key {
+			return details[i].Key < details[j].Key
+		}
+		if details[i].Language != details[j].Language {
+			return details[i].Language < details[j].Language
+		}
+		return details[i].Path < details[j].Path
+	})
+
+	return details
+}
+
+// untranslatedJSONOutput is the top-level document printed by `untranslated --json`.
+type untranslatedJSONOutput struct {
+	Untranslated []untranslatedJSONItem `json:"untranslated"`
+}
+
+// untranslatedJSONItem is a single untranslated leaf, at --detail granularity.
+type untranslatedJSONItem struct {
+	Key      string `json:"key"`
+	Language string `json:"language"`
+	Path     string `json:"path"`
+}
+
+// executeJSON prints a single JSON document describing every untranslated
+// leaf string unit (always at --detail granularity, regardless of --detail)
+// and applies --fail-if-any to the exit status.
+func (c *UntranslatedCommand) executeJSON(xcs *xcstrings.XCStrings) subcommands.ExitStatus {
+	details := c.collectFilteredDetails(xcs)
+
+	items := make([]untranslatedJSONItem, 0, len(details))
+	for _, d := range details {
+		items = append(items, untranslatedJSONItem{Key: d.Key, Language: d.Language, Path: d.Path})
+	}
+
+	data, err := json.MarshalIndent(untranslatedJSONOutput{Untranslated: items}, "", "  ")
+	if err != nil {
+		fmt.Fprintf(flag.CommandLine.Output(), "Error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+	fmt.Println(string(data))
+	return c.exitStatus(len(items) > 0)
+}
+
+func (c *UntranslatedCommand) executeDetail(xcs *xcstrings.XCStrings) subcommands.ExitStatus {
+	details := c.collectFilteredDetails(xcs)
 
 	if len(details) == 0 {
 		if c.prefix != "" && c.language != "" {
@@ -118,19 +186,8 @@ func (c *UntranslatedCommand) executeDetail(xcs *xcstrings.XCStrings) subcommand
 		return subcommands.ExitSuccess
 	}
 
-	// Sort by key, then language, then path
-	sort.Slice(details, func(i, j int) bool {
-		if details[i].Key != details[j].Key {
-			return details[i].Key < details[j].Key
-		}
-		if details[i].Language != details[j].Language {
-			return details[i].Language < details[j].Language
-		}
-		return details[i].Path < details[j].Path
-	})
-
 	for _, d := range details {
 		fmt.Printf("%s > %s > %s\n", d.Key, d.Language, d.Path)
 	}
-	return subcommands.ExitSuccess
+	return c.exitStatus(len(details) > 0)
 }

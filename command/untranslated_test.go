@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"path/filepath"
 	"strings"
@@ -239,6 +240,184 @@ func TestUntranslatedCommand_Execute_PartiallyTranslated_NoLang(t *testing.T) {
 	// Should NOT show fully translated key
 	if strings.Contains(output, "greeting:") {
 		t.Errorf("output should not contain 'greeting:' key, got: %q", output)
+	}
+}
+
+func TestUntranslatedCommand_Execute_JSON(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"translated_key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Translated"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "翻訳済み"}}
+				}
+			},
+			"untranslated_key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Untranslated"}},
+					"ja": {"stringUnit": {"state": "new", "value": "未翻訳"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &UntranslatedCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--lang", "ja", "--json"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed untranslatedJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v, output: %q", err, output)
+	}
+
+	if len(parsed.Untranslated) != 1 {
+		t.Fatalf("expected 1 untranslated item, got %+v", parsed.Untranslated)
+	}
+	item := parsed.Untranslated[0]
+	if item.Key != "untranslated_key" || item.Language != "ja" || item.Path != "new" {
+		t.Errorf("unexpected item: %+v", item)
+	}
+}
+
+func TestUntranslatedCommand_Execute_JSON_Empty(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"key1": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Key 1"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "キー1"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &UntranslatedCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--json"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed untranslatedJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v, output: %q", err, output)
+	}
+	if len(parsed.Untranslated) != 0 {
+		t.Errorf("expected no untranslated items, got %+v", parsed.Untranslated)
+	}
+}
+
+func TestUntranslatedCommand_Execute_FailIfAny(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"untranslated_key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Untranslated"}},
+					"ja": {"stringUnit": {"state": "new", "value": "未翻訳"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+	allTranslatedContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"key1": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Key 1"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "キー1"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	tests := []struct {
+		name           string
+		content        string
+		args           []string
+		expectedStatus int
+	}{
+		{
+			name:           "text mode, untranslated present",
+			content:        testContent,
+			args:           []string{"--fail-if-any"},
+			expectedStatus: 1,
+		},
+		{
+			name:           "text mode, all translated",
+			content:        allTranslatedContent,
+			args:           []string{"--fail-if-any"},
+			expectedStatus: 0,
+		},
+		{
+			name:           "detail mode, untranslated present",
+			content:        testContent,
+			args:           []string{"--detail", "--fail-if-any"},
+			expectedStatus: 1,
+		},
+		{
+			name:           "detail mode, all translated",
+			content:        allTranslatedContent,
+			args:           []string{"--detail", "--fail-if-any"},
+			expectedStatus: 0,
+		},
+		{
+			name:           "json mode, untranslated present",
+			content:        testContent,
+			args:           []string{"--json", "--fail-if-any"},
+			expectedStatus: 1,
+		},
+		{
+			name:           "json mode, all translated",
+			content:        allTranslatedContent,
+			args:           []string{"--json", "--fail-if-any"},
+			expectedStatus: 0,
+		},
+		{
+			name:           "without --fail-if-any, untranslated present still exits 0",
+			content:        testContent,
+			args:           []string{},
+			expectedStatus: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filePath := test.TempFile(t, "test.xcstrings", tt.content)
+
+			cmd := &UntranslatedCommand{}
+			flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+			cmd.SetFlags(flagSet)
+			args := append([]string{"-f", filePath}, tt.args...)
+			err := flagSet.Parse(args)
+			test.AssertNoError(t, err)
+
+			captureOutput(func() {
+				status := cmd.Execute(context.Background(), flagSet)
+				test.AssertEqual(t, int(status), tt.expectedStatus)
+			})
+		})
 	}
 }
 

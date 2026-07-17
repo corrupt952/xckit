@@ -87,18 +87,23 @@ All commands accept `-f` (or `--file`) to specify the `.xcstrings` file path. Wh
 ### list
 
 ```bash
-xckit list [-f file.xcstrings] [--prefix <prefix>] [--state <state>]
+xckit list [-f file.xcstrings] [--prefix <prefix>] [--state <state>] [--json]
 ```
 
 Lists all keys with their translation status. Use `--prefix` to filter by key prefix and `--state` to filter by `extractionState` (e.g. `manual`, `stale`, `new`). Each key with a non-empty `extractionState` is annotated in the output (e.g. `mykey [manual]:`). The two filters can be combined.
 
+- `--json`: Print a single JSON document to stdout instead of human-readable text (combinable with `--prefix`/`--state`). Each key includes `key`, `extractionState`, and a `languages` map keyed by language code; each language entry has a `state` (`translated`, `needs_review`, `new`, or `missing`) and either a `value` (plain string) or a `units` array of `{path, state, value}` for plural/device/substitution variations.
+
 ### untranslated
 
 ```bash
-xckit untranslated [-f file.xcstrings] [--lang <language>] [--prefix <prefix>] [--detail]
+xckit untranslated [-f file.xcstrings] [--lang <language>] [--prefix <prefix>] [--detail] [--json] [--fail-if-any]
 ```
 
 Shows keys that need translation. Without `--lang`, returns keys with any untranslated language. Use `--detail` to see per-variation-path breakdown (e.g., `key > ja > plural.other`).
+
+- `--json`: Print a single JSON document to stdout instead of human-readable text (combinable with `--lang`/`--prefix`). Always reports at per-variation-path granularity (like `--detail`), as `{"untranslated": [{"key", "language", "path"}, ...]}`.
+- `--fail-if-any`: Exit with status 1 if any untranslated string is found (0 otherwise). Works with any output mode, including `--json`, making it suitable for CI and pre-commit gates.
 
 ### set
 
@@ -131,10 +136,12 @@ Removes a key from the catalog regardless of its `extractionState`.
 ### status
 
 ```bash
-xckit status [-f file.xcstrings]
+xckit status [-f file.xcstrings] [--json]
 ```
 
 Displays translation progress for each language, showing both key-level and string-unit-level completion percentages along with `needs_review` counts. Stale keys are reported separately and excluded from progress calculations.
+
+- `--json`: Print a single JSON document to stdout instead of human-readable text: `{sourceLanguage, totalKeys, staleKeys, activeKeys, languages: [{language, keys: {translated, total, percentage}, strings: {translated, total, percentage}, needsReview}, ...]}`.
 
 ### export
 
@@ -152,7 +159,7 @@ xckit import --format csv [-f file.xcstrings] [--dry-run] [--backup] [--on-missi
 
 Imports translations from a CSV file produced by `export`.
 
-- `--dry-run`: Preview changes without writing
+- `--dry-run`: Preview changes without writing. The summary reports `created / updated / unchanged / cleared / skipped`; cells whose value already matches the catalog are counted as `unchanged` and never written (also when importing for real)
 - `--backup`: Create a `.bak` copy before writing
 - `--on-missing-key skip|error`: Handle keys present in CSV but missing from the catalog (default: `skip`)
 - `--clear-empty`: Remove translations for empty CSV cells
@@ -188,13 +195,14 @@ xckit import --format csv -f Localizable.xcstrings --backup translations.csv
 
 ```bash
 # Fail the build if any Japanese translations are missing
-if xckit untranslated --lang ja -f Localizable.xcstrings | grep -q .; then
-  echo "Untranslated keys found"
-  exit 1
-fi
+xckit untranslated --lang ja -f Localizable.xcstrings --fail-if-any
 
-# Check overall progress
-xckit status -f Localizable.xcstrings
+# Fail the build if any translation in any language is missing, and get
+# structured output for tooling/AI agents to parse
+xckit untranslated -f Localizable.xcstrings --fail-if-any --json
+
+# Check overall progress (machine-readable)
+xckit status -f Localizable.xcstrings --json
 
 # Clean up stale keys
 xckit stale --remove -f Localizable.xcstrings

@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"strings"
 	"testing"
@@ -360,6 +361,183 @@ func TestListCommand_Execute_Substitutions(t *testing.T) {
 		if !strings.Contains(output, expected) {
 			t.Errorf("output should contain %q, got: %q", expected, output)
 		}
+	}
+}
+
+func TestListCommand_Execute_JSON(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"key1": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Key 1"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "キー1"}}
+				}
+			},
+			"key2": {
+				"extractionState": "manual",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Key 2"}},
+					"ja": {"stringUnit": {"state": "new", "value": ""}}
+				}
+			},
+			"login.title": {
+				"localizations": {
+					"en": {
+						"variations": {
+							"plural": {
+								"one": {"stringUnit": {"state": "translated", "value": "one"}},
+								"other": {"stringUnit": {"state": "translated", "value": "other"}}
+							}
+						}
+					}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &ListCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--json"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed listJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v, output: %q", err, output)
+	}
+
+	if len(parsed.Keys) != 3 {
+		t.Fatalf("expected 3 keys, got %d: %+v", len(parsed.Keys), parsed.Keys)
+	}
+
+	byKey := make(map[string]listJSONKeyEntry, len(parsed.Keys))
+	for _, k := range parsed.Keys {
+		byKey[k.Key] = k
+	}
+
+	key1, ok := byKey["key1"]
+	if !ok {
+		t.Fatalf("expected key1 in output: %+v", parsed.Keys)
+	}
+	if key1.ExtractionState != "" {
+		t.Errorf("key1 should have no extractionState, got %q", key1.ExtractionState)
+	}
+	if key1.Languages["en"].State != "translated" || key1.Languages["en"].Value != "Key 1" {
+		t.Errorf("key1.en unexpected: %+v", key1.Languages["en"])
+	}
+	if key1.Languages["ja"].State != "translated" || key1.Languages["ja"].Value != "キー1" {
+		t.Errorf("key1.ja unexpected: %+v", key1.Languages["ja"])
+	}
+
+	key2, ok := byKey["key2"]
+	if !ok {
+		t.Fatalf("expected key2 in output: %+v", parsed.Keys)
+	}
+	if key2.ExtractionState != "manual" {
+		t.Errorf("key2 should have extractionState 'manual', got %q", key2.ExtractionState)
+	}
+	if key2.Languages["ja"].State != "new" {
+		t.Errorf("key2.ja should have state 'new', got %+v", key2.Languages["ja"])
+	}
+
+	loginTitle, ok := byKey["login.title"]
+	if !ok {
+		t.Fatalf("expected login.title in output: %+v", parsed.Keys)
+	}
+	enEntry := loginTitle.Languages["en"]
+	if enEntry.State != "translated" {
+		t.Errorf("login.title.en should be translated, got %+v", enEntry)
+	}
+	if len(enEntry.Units) != 2 {
+		t.Errorf("login.title.en should have 2 units, got %+v", enEntry.Units)
+	}
+	if jaEntry := loginTitle.Languages["ja"]; jaEntry.State != "missing" {
+		t.Errorf("login.title.ja should be missing, got %+v", jaEntry)
+	}
+}
+
+func TestListCommand_Execute_JSON_WithFilters(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"login.title": {
+				"extractionState": "manual",
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Login"}}
+				}
+			},
+			"other.key": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Other"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &ListCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--prefix", "login", "--state", "manual", "--json"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed listJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v, output: %q", err, output)
+	}
+	if len(parsed.Keys) != 1 || parsed.Keys[0].Key != "login.title" {
+		t.Errorf("expected only login.title, got %+v", parsed.Keys)
+	}
+}
+
+func TestListCommand_Execute_JSON_Empty(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"key1": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Key 1"}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	cmd := &ListCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	err := flagSet.Parse([]string{"-f", filePath, "--prefix", "nonexistent", "--json"})
+	test.AssertNoError(t, err)
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed listJSONOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON, got error %v, output: %q", err, output)
+	}
+	if len(parsed.Keys) != 0 {
+		t.Errorf("expected no keys, got %+v", parsed.Keys)
 	}
 }
 
