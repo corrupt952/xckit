@@ -1395,3 +1395,209 @@ func TestLoad_Substitutions(t *testing.T) {
 	}
 	test.AssertEqual(t, one.StringUnit.Value, "%arg file")
 }
+
+func TestXCStrings_SetVariationTranslation_SeedsOtherOnPluralMigration(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"items_count": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "アイテム"}},
+				},
+			},
+		},
+	}
+
+	migrated, created, err := xcstrings.SetVariationTranslation(
+		"items_count", "ja", "1個のアイテム", VariationOptions{Plural: "one"}, "",
+	)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, migrated, true)
+	test.AssertEqual(t, created, false)
+
+	loc := xcstrings.Strings["items_count"].Localizations["ja"]
+	if loc.StringUnit != nil {
+		t.Error("expected plain StringUnit to be cleared after migration")
+	}
+	if loc.Variations == nil || loc.Variations.Plural == nil {
+		t.Fatal("expected plural variations to be set")
+	}
+
+	one := loc.Variations.Plural["one"]
+	if one == nil || one.StringUnit == nil {
+		t.Fatal("expected 'one' plural to be set")
+	}
+	test.AssertEqual(t, one.StringUnit.State, "translated")
+	test.AssertEqual(t, one.StringUnit.Value, "1個のアイテム")
+
+	other := loc.Variations.Plural["other"]
+	if other == nil || other.StringUnit == nil {
+		t.Fatal("expected original value to be seeded into 'other'")
+	}
+	test.AssertEqual(t, other.StringUnit.State, "translated")
+	test.AssertEqual(t, other.StringUnit.Value, "アイテム")
+}
+
+func TestXCStrings_SetVariationTranslation_SeedPreservesOriginalState(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"items_count": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: &StringUnit{State: "needs_review", Value: "アイテム"}},
+				},
+			},
+		},
+	}
+
+	_, _, err := xcstrings.SetVariationTranslation(
+		"items_count", "ja", "1個のアイテム", VariationOptions{Plural: "one"}, "",
+	)
+	test.AssertNoError(t, err)
+
+	other := xcstrings.Strings["items_count"].Localizations["ja"].Variations.Plural["other"]
+	if other == nil || other.StringUnit == nil {
+		t.Fatal("expected 'other' to be seeded")
+	}
+	test.AssertEqual(t, other.StringUnit.State, "needs_review")
+	test.AssertEqual(t, other.StringUnit.Value, "アイテム")
+}
+
+func TestXCStrings_SetVariationTranslation_ExplicitOtherWinsOverSeed(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"items_count": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "元の値"}},
+				},
+			},
+		},
+	}
+
+	migrated, _, err := xcstrings.SetVariationTranslation(
+		"items_count", "ja", "明示的なother", VariationOptions{Plural: "other"}, "",
+	)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, migrated, true)
+
+	other := xcstrings.Strings["items_count"].Localizations["ja"].Variations.Plural["other"]
+	if other == nil || other.StringUnit == nil {
+		t.Fatal("expected 'other' to be set")
+	}
+	test.AssertEqual(t, other.StringUnit.State, "translated")
+	test.AssertEqual(t, other.StringUnit.Value, "明示的なother")
+}
+
+func TestXCStrings_SetVariationTranslation_AppendingToExistingVariationsDoesNotSeed(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"items_count": {
+				Localizations: map[string]Localization{
+					"ja": {
+						Variations: &Variations{
+							Plural: map[PluralCategory]*VariationValue{
+								"one": {StringUnit: &StringUnit{State: "translated", Value: "1個"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	migrated, _, err := xcstrings.SetVariationTranslation(
+		"items_count", "ja", "たくさん", VariationOptions{Plural: "other"}, "",
+	)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, migrated, false)
+
+	loc := xcstrings.Strings["items_count"].Localizations["ja"]
+	one := loc.Variations.Plural["one"]
+	if one == nil || one.StringUnit == nil {
+		t.Fatal("expected existing 'one' plural to remain untouched")
+	}
+	test.AssertEqual(t, one.StringUnit.Value, "1個")
+
+	other := loc.Variations.Plural["other"]
+	if other == nil || other.StringUnit == nil {
+		t.Fatal("expected 'other' plural to be set")
+	}
+	test.AssertEqual(t, other.StringUnit.Value, "たくさん")
+}
+
+func TestXCStrings_SetVariationTranslation_SeedsOtherOnDeviceMigration(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"welcome": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "ようこそ"}},
+				},
+			},
+		},
+	}
+
+	migrated, _, err := xcstrings.SetVariationTranslation(
+		"welcome", "ja", "iPhoneへようこそ", VariationOptions{Device: "iphone"}, "",
+	)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, migrated, true)
+
+	loc := xcstrings.Strings["welcome"].Localizations["ja"]
+	iphone := loc.Variations.Device["iphone"]
+	if iphone == nil || iphone.StringUnit == nil {
+		t.Fatal("expected 'iphone' device to be set")
+	}
+	test.AssertEqual(t, iphone.StringUnit.Value, "iPhoneへようこそ")
+
+	other := loc.Variations.Device["other"]
+	if other == nil || other.StringUnit == nil {
+		t.Fatal("expected original value to be seeded into device 'other'")
+	}
+	test.AssertEqual(t, other.StringUnit.State, "translated")
+	test.AssertEqual(t, other.StringUnit.Value, "ようこそ")
+}
+
+func TestXCStrings_SetVariationTranslation_SeedsOtherOnNestedMigration(t *testing.T) {
+	xcstrings := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"items_count": {
+				Localizations: map[string]Localization{
+					"ja": {StringUnit: &StringUnit{State: "translated", Value: "アイテム"}},
+				},
+			},
+		},
+	}
+
+	migrated, _, err := xcstrings.SetVariationTranslation(
+		"items_count", "ja", "iPhoneで1個",
+		VariationOptions{Plural: "one", Device: "iphone"}, "",
+	)
+	test.AssertNoError(t, err)
+	test.AssertEqual(t, migrated, true)
+
+	loc := xcstrings.Strings["items_count"].Localizations["ja"]
+	iphone := loc.Variations.Device["iphone"]
+	if iphone == nil || iphone.Variations == nil || iphone.Variations.Plural == nil {
+		t.Fatal("expected 'iphone' device with nested plural variations")
+	}
+	one := iphone.Variations.Plural["one"]
+	if one == nil || one.StringUnit == nil {
+		t.Fatal("expected 'one' plural under 'iphone' device")
+	}
+	test.AssertEqual(t, one.StringUnit.Value, "iPhoneで1個")
+
+	other := loc.Variations.Device["other"]
+	if other == nil || other.Variations == nil || other.Variations.Plural == nil {
+		t.Fatal("expected seeded nested device 'other' / plural 'other'")
+	}
+	otherPlural := other.Variations.Plural["other"]
+	if otherPlural == nil || otherPlural.StringUnit == nil {
+		t.Fatal("expected seeded plural 'other' under device 'other'")
+	}
+	test.AssertEqual(t, otherPlural.StringUnit.State, "translated")
+	test.AssertEqual(t, otherPlural.StringUnit.Value, "アイテム")
+}

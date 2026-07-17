@@ -360,6 +360,44 @@ func (x *XCStrings) SetVariationTranslation(key, language, value string, opts Va
 		loc.Variations = &Variations{}
 	}
 
+	// When migrating from a plain stringUnit to variations, seed the
+	// discarded value into the "other" fallback slot(s) so the existing
+	// translation is preserved rather than silently dropped. If the
+	// caller's own target happens to land on the same slot, the explicit
+	// value set below overwrites the seed, so the caller's value always
+	// wins.
+	if migrated {
+		seedUnit := &StringUnit{State: loc.StringUnit.State, Value: loc.StringUnit.Value}
+		switch {
+		case opts.Plural != "" && opts.Device != "":
+			if loc.Variations.Device == nil {
+				loc.Variations.Device = make(map[string]*VariationValue)
+			}
+			otherDevice := loc.Variations.Device["other"]
+			if otherDevice == nil {
+				otherDevice = &VariationValue{}
+			}
+			if otherDevice.Variations == nil {
+				otherDevice.Variations = &Variations{}
+			}
+			if otherDevice.Variations.Plural == nil {
+				otherDevice.Variations.Plural = make(map[PluralCategory]*VariationValue)
+			}
+			otherDevice.Variations.Plural["other"] = &VariationValue{StringUnit: seedUnit}
+			loc.Variations.Device["other"] = otherDevice
+		case opts.Plural != "":
+			if loc.Variations.Plural == nil {
+				loc.Variations.Plural = make(map[PluralCategory]*VariationValue)
+			}
+			loc.Variations.Plural["other"] = &VariationValue{StringUnit: seedUnit}
+		case opts.Device != "":
+			if loc.Variations.Device == nil {
+				loc.Variations.Device = make(map[string]*VariationValue)
+			}
+			loc.Variations.Device["other"] = &VariationValue{StringUnit: seedUnit}
+		}
+	}
+
 	unit := &StringUnit{
 		State: "translated",
 		Value: value,
