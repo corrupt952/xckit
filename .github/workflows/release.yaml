@@ -51,6 +51,10 @@ jobs:
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          # GoReleaser's default checksum filename is version-prefixed
-          # (xckit_<version>_checksums.txt), not a fixed checksums.txt.
-          subject-checksums: dist/*_checksums.txt
+          # subject-path expands globs; subject-checksums does not — a value
+          # that is not an existing file is parsed as literal checksums
+          # content, so "dist/*_checksums.txt" resolved to zero subjects while
+          # the step still reported success. The archives carry the same names
+          # and digests the checksums file lists, and a glob that matches
+          # nothing fails the step instead of attesting nothing.
+          subject-path: dist/*.tar.gz
