@@ -859,3 +859,57 @@ func TestUntranslatedCommand_Execute_WithFixtures(t *testing.T) {
 		})
 	}
 }
+
+func TestUntranslatedCommand_Execute_ExcludesEmptyTranslationTargets(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": ""}},
+					"ja": {"stringUnit": {"state": "needs_review", "value": ""}}
+				}
+			},
+			"empty_values": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": ""}},
+					"ja": {"stringUnit": {"state": "translated", "value": ""}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{name: "human", args: []string{"--lang", "ja"}},
+		{name: "detail", args: []string{"--lang", "ja", "--detail"}},
+		{name: "json gate", args: []string{"--lang", "ja", "--json", "--fail-if-any"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &UntranslatedCommand{}
+			flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+			cmd.SetFlags(flagSet)
+			test.AssertNoError(t, flagSet.Parse(append([]string{"-f", filePath}, tt.args...)))
+
+			output := captureOutput(func() {
+				status := cmd.Execute(context.Background(), flagSet)
+				test.AssertEqual(t, int(status), 0)
+			})
+			if strings.Contains(output, "empty_values") {
+				t.Fatalf("excluded key appeared in output: %q", output)
+			}
+
+			if tt.name == "json gate" {
+				var parsed untranslatedJSONOutput
+				test.AssertNoError(t, json.Unmarshal([]byte(output), &parsed))
+				if len(parsed.Untranslated) != 0 {
+					t.Fatalf("expected no untranslated items, got %+v", parsed.Untranslated)
+				}
+			}
+		})
+	}
+}

@@ -266,3 +266,51 @@ func TestStatusCommand_Execute_FileNotFound(t *testing.T) {
 	status := cmd.Execute(context.Background(), flagSet)
 	test.AssertEqual(t, int(status), 1) // ExitFailure
 }
+
+func TestStatusCommand_Execute_ExcludesEmptyTranslationTargets(t *testing.T) {
+	testContent := `{
+		"sourceLanguage": "en",
+		"strings": {
+			"normal": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": "Hello"}},
+					"ja": {"stringUnit": {"state": "translated", "value": "こんにちは"}}
+				}
+			},
+			"": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": ""}},
+					"de": {"stringUnit": {"state": "translated", "value": ""}}
+				}
+			},
+			"empty_values": {
+				"localizations": {
+					"en": {"stringUnit": {"state": "translated", "value": ""}},
+					"fr": {"stringUnit": {"state": "translated", "value": ""}}
+				}
+			}
+		},
+		"version": "1.0"
+	}`
+
+	filePath := test.TempFile(t, "test.xcstrings", testContent)
+	cmd := &StatusCommand{}
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	cmd.SetFlags(flagSet)
+	test.AssertNoError(t, flagSet.Parse([]string{"-f", filePath, "--json"}))
+
+	output := captureOutput(func() {
+		status := cmd.Execute(context.Background(), flagSet)
+		test.AssertEqual(t, int(status), 0)
+	})
+
+	var parsed statusJSONOutput
+	test.AssertNoError(t, json.Unmarshal([]byte(output), &parsed))
+	test.AssertEqual(t, parsed.TotalKeys, 3)
+	test.AssertEqual(t, parsed.ActiveKeys, 1)
+	if len(parsed.Languages) != 1 || parsed.Languages[0].Language != "ja" {
+		t.Fatalf("expected only ja progress, got %+v", parsed.Languages)
+	}
+	test.AssertEqual(t, parsed.Languages[0].Keys.Total, 1)
+	test.AssertEqual(t, parsed.Languages[0].Strings.Total, 1)
+}

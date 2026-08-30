@@ -1057,6 +1057,70 @@ func TestXCStrings_StaleKeys(t *testing.T) {
 	})
 }
 
+func TestXCStrings_TranslationTargetsExcludeEmptyContent(t *testing.T) {
+	shouldNotTranslate := false
+	x := &XCStrings{
+		SourceLanguage: "en",
+		Strings: map[string]StringDefinition{
+			"normal": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: &StringUnit{State: "translated", Value: "Hello"}},
+					"ja": {StringUnit: &StringUnit{State: "new", Value: ""}},
+				},
+			},
+			"": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: &StringUnit{State: "translated", Value: ""}},
+					"ja": {StringUnit: &StringUnit{State: "needs_review", Value: ""}},
+					"de": {StringUnit: &StringUnit{State: "translated", Value: ""}},
+				},
+			},
+			"empty_values": {
+				Localizations: map[string]Localization{
+					"en": {StringUnit: &StringUnit{State: "translated", Value: ""}},
+					"fr": {StringUnit: &StringUnit{State: "translated", Value: ""}},
+				},
+			},
+			"no_units_yet": {Localizations: map[string]Localization{}},
+			"stale":        {ExtractionState: "stale", Localizations: map[string]Localization{}},
+			"opted_out":    {ShouldTranslate: &shouldNotTranslate, Localizations: map[string]Localization{}},
+		},
+	}
+
+	targets := x.TranslationTargetKeys()
+	sort.Strings(targets)
+	test.AssertSliceEqual(t, targets, []string{"no_units_yet", "normal"})
+
+	languages := x.TranslationLanguages()
+	sort.Strings(languages)
+	test.AssertSliceEqual(t, languages, []string{"ja"})
+
+	untranslated := x.UntranslatedKeys("ja")
+	sort.Strings(untranslated)
+	test.AssertSliceEqual(t, untranslated, []string{"no_units_yet", "normal"})
+
+	details := x.UntranslatedDetailsForLanguage("ja")
+	if len(details) != 2 {
+		t.Fatalf("expected two untranslated details, got %+v", details)
+	}
+
+	allDetails := x.UntranslatedDetailsForAllLanguages()
+	if len(allDetails) != 2 {
+		t.Fatalf("expected two all-language details, got %+v", allDetails)
+	}
+
+	if got := x.NeedsReviewKeys("ja"); len(got) != 0 {
+		t.Fatalf("expected excluded empty key not to need review, got %v", got)
+	}
+	if got := x.TranslatedKeys("fr"); len(got) != 0 {
+		t.Fatalf("expected translated empty values not to count as translated, got %v", got)
+	}
+
+	anyUntranslated := x.KeysWithAnyUntranslated()
+	sort.Strings(anyUntranslated)
+	test.AssertSliceEqual(t, anyUntranslated, []string{"no_units_yet", "normal"})
+}
+
 func TestLocalization_AllStringUnits(t *testing.T) {
 	t.Run("top-level StringUnit only", func(t *testing.T) {
 		loc := Localization{

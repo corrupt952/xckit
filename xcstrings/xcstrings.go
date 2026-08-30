@@ -173,6 +173,45 @@ func (x *XCStrings) ActiveKeys() []string {
 	return keys
 }
 
+// TranslationTargetKeys returns active keys that contain content worth
+// translating. Xcode may extract empty string literals as catalog entries; an
+// empty key or an entry whose existing string units are all marked translated
+// but empty is metadata, not translation work. Empty units in a non-translated
+// state, and entries without any string units, remain targets because they can
+// represent newly extracted keys awaiting localization.
+func (x *XCStrings) TranslationTargetKeys() []string {
+	var keys []string
+	for key := range x.Strings {
+		if x.IsTranslationTarget(key) {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+// IsTranslationTarget reports whether a key should participate in translation
+// queues and progress calculations.
+func (x *XCStrings) IsTranslationTarget(key string) bool {
+	definition, exists := x.Strings[key]
+	if !exists || key == "" || definition.ExtractionState == "stale" {
+		return false
+	}
+	if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
+		return false
+	}
+
+	hasStringUnit := false
+	for _, localization := range definition.Localizations {
+		for _, unit := range localization.AllStringUnits() {
+			hasStringUnit = true
+			if unit.Value != "" || unit.State != "translated" {
+				return true
+			}
+		}
+	}
+	return !hasStringUnit
+}
+
 // IsStale returns whether the given key has extractionState "stale".
 func (x *XCStrings) IsStale(key string) bool {
 	def, exists := x.Strings[key]
@@ -225,10 +264,7 @@ func (x *XCStrings) RemoveStaleKeys() int {
 func (x *XCStrings) UntranslatedKeys(language string) []string {
 	var untranslated []string
 	for key, definition := range x.Strings {
-		if definition.ExtractionState == "stale" {
-			continue
-		}
-		if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
+		if !x.IsTranslationTarget(key) {
 			continue
 		}
 		localization, exists := definition.Localizations[language]
@@ -257,6 +293,27 @@ func (x *XCStrings) Languages() []string {
 	for _, definition := range x.Strings {
 		for lang := range definition.Localizations {
 			// Exclude source language from the list
+			if lang != x.SourceLanguage {
+				languageSet[lang] = true
+			}
+		}
+	}
+
+	languages := make([]string, 0, len(languageSet))
+	for lang := range languageSet {
+		languages = append(languages, lang)
+	}
+	return languages
+}
+
+// TranslationLanguages returns languages found on translation-target entries.
+func (x *XCStrings) TranslationLanguages() []string {
+	languageSet := make(map[string]bool)
+	for key, definition := range x.Strings {
+		if !x.IsTranslationTarget(key) {
+			continue
+		}
+		for lang := range definition.Localizations {
 			if lang != x.SourceLanguage {
 				languageSet[lang] = true
 			}
@@ -613,13 +670,10 @@ func (x *XCStrings) SetSubstitutionTranslation(key, language, subName, value str
 // Stale keys are excluded.
 func (x *XCStrings) KeysWithAnyUntranslated() []string {
 	var result []string
-	languages := x.Languages()
+	languages := x.TranslationLanguages()
 
 	for key, definition := range x.Strings {
-		if definition.ExtractionState == "stale" {
-			continue
-		}
-		if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
+		if !x.IsTranslationTarget(key) {
 			continue
 		}
 		hasUntranslated := false
@@ -658,7 +712,7 @@ func (x *XCStrings) KeysWithAnyUntranslated() []string {
 func (x *XCStrings) NeedsReviewKeys(language string) []string {
 	var keys []string
 	for key, def := range x.Strings {
-		if def.ShouldTranslate != nil && !*def.ShouldTranslate {
+		if !x.IsTranslationTarget(key) {
 			continue
 		}
 		loc, exists := def.Localizations[language]
@@ -681,6 +735,9 @@ func (x *XCStrings) NeedsReviewKeys(language string) []string {
 func (x *XCStrings) TranslatedKeys(language string) []string {
 	var translated []string
 	for key, definition := range x.Strings {
+		if !x.IsTranslationTarget(key) {
+			continue
+		}
 		localization, exists := definition.Localizations[language]
 		if !exists {
 			continue
@@ -715,10 +772,7 @@ type UntranslatedDetail struct {
 func (x *XCStrings) UntranslatedDetailsForLanguage(language string) []UntranslatedDetail {
 	var details []UntranslatedDetail
 	for key, definition := range x.Strings {
-		if definition.ExtractionState == "stale" {
-			continue
-		}
-		if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
+		if !x.IsTranslationTarget(key) {
 			continue
 		}
 		localization, exists := definition.Localizations[language]
@@ -735,12 +789,9 @@ func (x *XCStrings) UntranslatedDetailsForLanguage(language string) []Untranslat
 // leaf string units across all languages and keys.
 func (x *XCStrings) UntranslatedDetailsForAllLanguages() []UntranslatedDetail {
 	var details []UntranslatedDetail
-	languages := x.Languages()
+	languages := x.TranslationLanguages()
 	for key, definition := range x.Strings {
-		if definition.ExtractionState == "stale" {
-			continue
-		}
-		if definition.ShouldTranslate != nil && !*definition.ShouldTranslate {
+		if !x.IsTranslationTarget(key) {
 			continue
 		}
 		for _, lang := range languages {
