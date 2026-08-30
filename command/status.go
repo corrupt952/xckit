@@ -44,8 +44,8 @@ func (c *StatusCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 
 	totalKeys := len(xcstrings.Strings)
 	staleKeys := xcstrings.StaleKeys()
-	activeKeys := totalKeys - len(staleKeys)
-	languages := xcstrings.Languages()
+	activeKeys := len(xcstrings.TranslationTargetKeys())
+	languages := xcstrings.TranslationLanguages()
 	sort.Strings(languages)
 
 	langStats := make([]statusLanguageStats, 0, len(languages))
@@ -63,6 +63,8 @@ func (c *StatusCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 	fmt.Printf("Total Keys: %d\n", totalKeys)
 	if len(staleKeys) > 0 {
 		fmt.Printf("Stale Keys: %d\n", len(staleKeys))
+	}
+	if activeKeys != totalKeys {
 		fmt.Printf("Active Keys: %d\n", activeKeys)
 	}
 	fmt.Printf("Languages: %s\n\n", languages)
@@ -104,11 +106,8 @@ func computeStatusLanguageStats(xcs *xcstringspkg.XCStrings, lang string, active
 
 	totalUnits := 0
 	translatedUnits := 0
-	for _, key := range xcs.ActiveKeys() {
+	for _, key := range xcs.TranslationTargetKeys() {
 		def := xcs.Strings[key]
-		if def.ShouldTranslate != nil && !*def.ShouldTranslate {
-			continue
-		}
 		loc, exists := def.Localizations[lang]
 		if !exists {
 			totalUnits++

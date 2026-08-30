@@ -227,7 +227,7 @@ Removes a key from the catalog regardless of its `extractionState`.
 xckit status [-f file.xcstrings] [--json]
 ```
 
-Displays translation progress for each language, showing both key-level and string-unit-level completion percentages along with `needs_review` counts. Stale keys are reported separately and excluded from progress calculations.
+Displays translation progress for each language, showing both key-level and string-unit-level completion percentages along with `needs_review` counts. Stale keys, keys with `shouldTranslate: false`, the empty key (`""`), and entries whose existing string units are all marked `translated` but contain empty values are excluded from progress calculations. Empty values in a non-translated state remain translation targets. The catalog is never rewritten when these entries are skipped.
 
 - `--json`: Print a single JSON document to stdout instead of human-readable text: `{sourceLanguage, totalKeys, staleKeys, activeKeys, languages: [{language, keys: {translated, total, percentage}, strings: {translated, total, percentage}, needsReview}, ...]}`.
 
