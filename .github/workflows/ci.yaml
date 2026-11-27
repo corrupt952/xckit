@@ -93,8 +93,6 @@ jobs:
       - name: zizmor
         uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
 
-  # Catches .goreleaser.yml mistakes before a tag push instead of in the
-  # release run.
   goreleaser-check:
     name: GoReleaser check
     runs-on: ubuntu-latest
