@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"xckit/helper/atomicwrite"
+	"github.com/corrupt952/xckit/helper/atomicwrite"
 )
 
 // XCStrings represents the structure of an Xcode String Catalog file.

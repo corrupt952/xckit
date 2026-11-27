@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"xckit/xcstrings"
+	"github.com/corrupt952/xckit/xcstrings"
 
 	"github.com/google/subcommands"
 )

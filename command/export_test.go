@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"xckit/helper/test"
-	"xckit/xcstrings"
+	"github.com/corrupt952/xckit/helper/test"
+	"github.com/corrupt952/xckit/xcstrings"
 )
 
 func TestExportCommand_Execute_SimpleCSV(t *testing.T) {

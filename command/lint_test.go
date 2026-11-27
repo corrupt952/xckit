@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"xckit/helper/test"
+	"github.com/corrupt952/xckit/helper/test"
 )
 
 func runLintCommand(t *testing.T, filePath string, args ...string) (string, int) {

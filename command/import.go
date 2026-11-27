@@ -10,8 +10,8 @@ import (
 	"os"
 	"strings"
 
-	"xckit/helper/atomicwrite"
-	"xckit/xcstrings"
+	"github.com/corrupt952/xckit/helper/atomicwrite"
+	"github.com/corrupt952/xckit/xcstrings"
 
 	"github.com/google/subcommands"
 )

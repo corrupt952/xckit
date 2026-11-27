@@ -8,7 +8,7 @@ import (
 	"math"
 	"sort"
 
-	xcstringspkg "xckit/xcstrings"
+	xcstringspkg "github.com/corrupt952/xckit/xcstrings"
 
 	"github.com/google/subcommands"
 )

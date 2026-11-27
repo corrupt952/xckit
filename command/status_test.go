@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"xckit/helper/test"
+	"github.com/corrupt952/xckit/helper/test"
 )
 
 func TestStatusCommand_Execute(t *testing.T) {

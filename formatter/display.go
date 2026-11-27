@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"xckit/xcstrings"
+	"github.com/corrupt952/xckit/xcstrings"
 )
 
 func DisplayKeyDetails(x *xcstrings.XCStrings, keys []string) {
