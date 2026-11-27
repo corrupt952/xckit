@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"xckit/helper/test"
-	"xckit/xcstrings"
+	"github.com/corrupt952/xckit/helper/test"
+	"github.com/corrupt952/xckit/xcstrings"
 )
 
 func TestStaleCommand_Execute_ListStale(t *testing.T) {

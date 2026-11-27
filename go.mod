@@ -1,4 +1,4 @@
-module xckit
+module github.com/corrupt952/xckit
 
 go 1.24.2
 

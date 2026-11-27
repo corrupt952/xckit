@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"xckit/formatter"
-	"xckit/xcstrings"
+	"github.com/corrupt952/xckit/formatter"
+	"github.com/corrupt952/xckit/xcstrings"
 
 	"github.com/google/subcommands"
 )

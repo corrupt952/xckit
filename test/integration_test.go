@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"xckit/helper/test"
+	"github.com/corrupt952/xckit/helper/test"
 )
 
 // buildXckit builds the xckit binary for testing

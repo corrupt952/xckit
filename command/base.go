@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"xckit/xcstrings"
+	"github.com/corrupt952/xckit/xcstrings"
 )
 
 type XCStringsCommand struct {

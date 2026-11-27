@@ -28,7 +28,7 @@
             src = pkgs.lib.cleanSource self;
             vendorHash = "sha256-vU5ZB9c4xqvWEk7NZkchaUlGS0mzDi5YHbe/Apq+FaU=";
             # Keep in sync with .goreleaser.yml / Makefile LDFLAGS.
-            ldflags = [ "-s" "-w" "-X" "xckit/command.Version=${version}" ];
+            ldflags = [ "-s" "-w" "-X" "github.com/corrupt952/xckit/command.Version=${version}" ];
             meta.mainProgram = "xckit";
           };
         });

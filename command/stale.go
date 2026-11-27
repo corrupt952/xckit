@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"xckit/formatter"
+	"github.com/corrupt952/xckit/formatter"
 
 	"github.com/google/subcommands"
 )

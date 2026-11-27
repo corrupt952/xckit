@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/subcommands"
 
-	"xckit/command"
+	"github.com/corrupt952/xckit/command"
 )
 
 func main() {

@@ -1,5 +1,5 @@
 VERSION ?= 0.1.0
-LDFLAGS ?= -ldflags "-s -w -X 'xckit/command.Version=$(VERSION)'"
+LDFLAGS ?= -ldflags "-s -w -X 'github.com/corrupt952/xckit/command.Version=$(VERSION)'"
 
 # HACK: make [target] [ARGS...]
 ARGS = $(filter-out $@,$(MAKECMDGOALS))
