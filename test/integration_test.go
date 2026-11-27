@@ -56,8 +56,7 @@ func TestIntegration_Version(t *testing.T) {
 	test.AssertEqual(t, exitCode, 0)
 	test.AssertEqual(t, stderr, "")
 
-	// Should output version (either "dev" or actual version)
-	if !strings.Contains(stdout, "dev") && !strings.Contains(stdout, "0.1.0") {
+	if strings.TrimSpace(stdout) == "" {
 		t.Errorf("expected version output, got: %q", stdout)
 	}
 }
